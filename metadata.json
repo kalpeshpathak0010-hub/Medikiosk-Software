@@ -1,0 +1,6 @@
+{
+  "name": "MediKiosk – AI-Powered Clinical Intake Platform",
+  "description": "Hospital self-service kiosk prototype for Indian OPDs featuring multilingual voice/touch clinical history-taking, OCR document parsing, red-flag triage detection, AYUSH examination, and physician-verified clinical summaries.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,266 @@
+{
+  "entities": {
+    "hospitals": {
+      "title": "Hospital Facility",
+      "description": "Hospital facility metadata and network tenant configuration",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "code": { "type": "string" },
+        "address": { "type": "string" },
+        "contact": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "code"]
+    },
+    "users": {
+      "title": "User Profile",
+      "description": "Authenticated staff, doctor, or kiosk user record",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "role": { "type": "string", "enum": ["PATIENT", "DOCTOR", "ADMIN"] },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "department": { "type": "string" },
+        "registrationNumber": { "type": "string" },
+        "badgeNumber": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["uid", "role", "name"]
+    },
+    "patients": {
+      "title": "Patient Record",
+      "description": "Demographic and identification record for outpatient",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "abhaNumber": { "type": "string" },
+        "name": { "type": "string" },
+        "age": { "type": "number" },
+        "gender": { "type": "string" },
+        "phone": { "type": "string" },
+        "address": { "type": "string" },
+        "emergencyContact": { "type": "string" },
+        "preferredLanguage": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "name", "gender"]
+    },
+    "encounters": {
+      "title": "Patient Clinical Encounter",
+      "description": "OPD visit tracking, status, and queue priority",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "tokenNumber": { "type": "string" },
+        "department": { "type": "string" },
+        "chiefComplaint": { "type": "string" },
+        "intakeMode": { "type": "string", "enum": ["modern", "ayush", "hybrid"] },
+        "status": { "type": "string", "enum": ["INTAKE", "WAITING", "IN_REVIEW", "VERIFIED", "SIGNED_OFF", "COMPLETED"] },
+        "triagePriority": { "type": "string", "enum": ["EMERGENCY", "URGENT", "STANDARD"] },
+        "hasRedFlag": { "type": "boolean" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "patientId", "status", "tokenNumber"]
+    },
+    "clinicalHistories": {
+      "title": "Clinical History Record",
+      "description": "Structured medical intake answers and history of presenting illness",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "HPI": { "type": "string" },
+        "pastMedicalHistory": { "type": "array", "items": { "type": "string" } },
+        "surgicalHistory": { "type": "array", "items": { "type": "string" } },
+        "medicationHistory": { "type": "array", "items": { "type": "object" } },
+        "allergies": { "type": "array", "items": { "type": "string" } },
+        "familyHistory": { "type": "array", "items": { "type": "string" } },
+        "socialHistory": { "type": "object" },
+        "investigations": { "type": "array", "items": { "type": "object" } },
+        "symptoms": { "type": "array", "items": { "type": "string" } },
+        "clinicalAnswers": { "type": "array", "items": { "type": "object" } },
+        "redFlags": { "type": "array", "items": { "type": "object" } },
+        "triageInformation": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["encounterId", "patientId"]
+    },
+    "ayushAssessments": {
+      "title": "AYUSH Pariksha Assessment",
+      "description": "Ayurveda Ashtavidha Pariksha & Dashavidha examination data",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "prakriti": { "type": "object" },
+        "agni": { "type": "string" },
+        "koshtha": { "type": "string" },
+        "sara": { "type": "string" },
+        "sattva": { "type": "string" },
+        "aharaShakti": { "type": "string" },
+        "vyayamaShakti": { "type": "string" },
+        "nidanaNotes": { "type": "string" },
+        "additionalParameters": { "type": "object" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["encounterId", "patientId"]
+    },
+    "documents": {
+      "title": "Medical Document Metadata",
+      "description": "Scanned prescriptions, lab reports, and radiological attachments",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "patientId": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "type": { "type": "string" },
+        "filename": { "type": "string" },
+        "storagePath": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "mimeType": { "type": "string" },
+        "uploadedAt": { "type": "string" },
+        "ocrStatus": { "type": "string", "enum": ["PENDING", "PROCESSING", "COMPLETED", "FAILED"] },
+        "ocrConfidence": { "type": "number" },
+        "verificationStatus": { "type": "string" }
+      },
+      "required": ["id", "patientId", "filename"]
+    },
+    "ocrResults": {
+      "title": "OCR Entity Extraction Result",
+      "description": "Extracted medications, dosages, lab values and confidence scoring",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "documentId": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "diagnoses": { "type": "array", "items": { "type": "object" } },
+        "medications": { "type": "array", "items": { "type": "object" } },
+        "laboratoryValues": { "type": "array", "items": { "type": "object" } },
+        "investigations": { "type": "array", "items": { "type": "object" } },
+        "extractedDates": { "type": "array", "items": { "type": "string" } },
+        "confidenceScores": { "type": "object" },
+        "rawStructuredResult": { "type": "string" },
+        "verified": { "type": "boolean" },
+        "verifiedBy": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["documentId"]
+    },
+    "clinicalSummaries": {
+      "title": "Clinical Summary",
+      "description": "Aggregated bilingual clinical summary for physician review",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "tokenNumber": { "type": "string" },
+        "chiefComplaint": { "type": "string" },
+        "HPI": { "type": "string" },
+        "historyOfPresentIllness": { "type": "string" },
+        "pastMedicalHistory": { "type": "array", "items": { "type": "string" } },
+        "pastSurgicalHistory": { "type": "array", "items": { "type": "string" } },
+        "currentMedications": { "type": "array", "items": { "type": "object" } },
+        "drugAllergies": { "type": "array", "items": { "type": "string" } },
+        "familyHistory": { "type": "array", "items": { "type": "string" } },
+        "personalHistory": { "type": "object" },
+        "investigations": { "type": "array", "items": { "type": "object" } },
+        "redFlags": { "type": "array", "items": { "type": "object" } },
+        "ayushHistory": { "type": "object" },
+        "physicianNotes": { "type": "string" },
+        "isPhysicianVerified": { "type": "boolean" },
+        "verifiedByDoctorName": { "type": "string" },
+        "verificationTimestamp": { "type": "string" },
+        "status": { "type": "string" },
+        "generatedAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["patientId"]
+    },
+    "physicianReviews": {
+      "title": "Physician Review & Amendments",
+      "description": "Doctor HPI edits, verified entity toggles, and clinical remarks",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "edits": { "type": "object" },
+        "notes": { "type": "string" },
+        "verificationStatus": { "type": "string" },
+        "verifiedAt": { "type": "string" }
+      },
+      "required": ["encounterId", "doctorId"]
+    },
+    "signOffs": {
+      "title": "Physician Sign-Off Record",
+      "description": "Legally bound digital sign-off and registration number",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "doctorRegistrationNumber": { "type": "string" },
+        "finalNotes": { "type": "string" },
+        "signedAt": { "type": "string" },
+        "status": { "type": "string" },
+        "diagnosticReportId": { "type": "string" }
+      },
+      "required": ["encounterId", "doctorId", "signedAt"]
+    },
+    "diagnosticReports": {
+      "title": "FHIR R4 DiagnosticReport",
+      "description": "ABDM-compatible standardized FHIR R4 clinical JSON",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "encounterId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "doctorId": { "type": "string" },
+        "status": { "type": "string" },
+        "fhirVersion": { "type": "string" },
+        "resource": { "type": "object" },
+        "generatedAt": { "type": "string" }
+      },
+      "required": ["id", "encounterId", "patientId", "resource"]
+    },
+    "auditLogs": {
+      "title": "Security & Clinical Audit Log",
+      "description": "Immutable trail of patient creation, document OCR, triage, and sign-offs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "role": { "type": "string" },
+        "hospitalId": { "type": "string" },
+        "action": { "type": "string" },
+        "entityType": { "type": "string" },
+        "entityId": { "type": "string" },
+        "timestamp": { "type": "string" },
+        "metadata": { "type": "object" }
+      },
+      "required": ["action", "timestamp"]
+    }
+  }
+}
