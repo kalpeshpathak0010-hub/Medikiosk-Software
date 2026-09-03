@@ -3,10 +3,12 @@ import { Language } from '../types';
 const rawTranslations: Record<Language, Record<string, string>> = {
   en: {
     appName: 'MEDIKIOSK',
-    appTagline: 'AI-Powered Clinical Intake Platform',
-    appSubheading: 'Complete your basic medical history before meeting your doctor.',
+    appTagline: 'Patient Clinical Intake System',
+    appTaglineSub: 'Digital Clinical History & Document Assistance',
+    appSubheading: 'Complete your basic health information before meeting the doctor.',
+    govInfoBar: 'Patient services • Clinical history • Document assistance',
     kioskStation: 'Kiosk Terminal #04 – General OPD (Ground Floor)',
-    hospitalContext: 'OPD • AIIMS New Delhi',
+    hospitalContext: 'Central OPD Network • AIIMS New Delhi',
     kioskReadyStatus: 'Kiosk 04 · Ready',
     
     // Homepage Clinical Content
@@ -158,10 +160,12 @@ const rawTranslations: Record<Language, Record<string, string>> = {
   
   hi: {
     appName: 'मेडीकियोस्क',
-    appTagline: 'एआई-संचालित क्लिनिकल इंटेक प्लेटफॉर्म',
-    appSubheading: 'डॉक्टर से मिलने से पहले अपना प्राथमिक मेडिकल इतिहास दर्ज करें।',
+    appTagline: 'मरीज़ क्लिनिकल इनटेक प्रणाली',
+    appTaglineSub: 'डिजिटल क्लिनिकल इतिहास एवं दस्तावेज़ सहायता',
+    appSubheading: 'डॉक्टर से मिलने से पहले अपनी बुनियादी स्वास्थ्य जानकारी दर्ज करें।',
+    govInfoBar: 'रोगी सेवाएं • क्लिनिकल इतिहास • दस्तावेज़ सहायता',
     kioskStation: 'कियोस्क टर्मिनल #04 – सामान्य ओपीडी (भूतल)',
-    hospitalContext: 'ओपीडी • एम्स नई दिल्ली',
+    hospitalContext: 'केंद्रीय ओपीडी नेटवर्क • एम्स नई दिल्ली',
     kioskReadyStatus: 'कियोस्क 04 · तैयार',
     
     // Homepage Clinical Content
@@ -313,10 +317,12 @@ const rawTranslations: Record<Language, Record<string, string>> = {
   
   mr: {
     appName: 'मेडीकियोस्क',
-    appTagline: 'एआय-सक्षम क्लिनिकल इनटेक प्लॅटफॉर्म',
-    appSubheading: 'डॉक्टरांना भेटण्यापूर्वी आपला मूलभूत वैद्यकीय इतिहास नोंदवा.',
+    appTagline: 'रुग्ण क्लिनिकल इनटेक प्रणाली',
+    appTaglineSub: 'डिजिटल क्लिनिकल इतिहास आणि कागदपत्र सहाय्य',
+    appSubheading: 'डॉक्टरांना भेटण्यापूर्वी आपली मूलभूत आरोग्य माहिती नोंदवा.',
+    govInfoBar: 'रुग्ण सेवा • क्लिनिकल इतिहास • कागदपत्र सहाय्य',
     kioskStation: 'कियोस्क टर्मिनल #04 – सामान्य ओपीडी (तळमजला)',
-    hospitalContext: 'ओपीडी • एम्स नवी दिल्ली',
+    hospitalContext: 'मध्यवर्ती ओपीडी नेटवर्क • एम्स नवी दिल्ली',
     kioskReadyStatus: 'कियोस्क 04 · सज्ज',
     
     // Homepage Clinical Content

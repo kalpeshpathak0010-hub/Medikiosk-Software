@@ -37,7 +37,6 @@ import {
   QuestionAnswer,
   RedFlagAlert,
 } from './types';
-import { DEMO_PATIENTS, DEMO_SUMMARIES, DEMO_RED_FLAGS, DEMO_TIMELINE_EVENTS } from './data/demoPatients';
 import { generateClinicalSummaryFromAnswers } from './services/clinicalEngine';
 import { storageService } from './services/storageService';
 import {
@@ -46,6 +45,9 @@ import {
   updateClinicalSummaryInDb,
   subscribeToPatients,
   subscribeToSummaries,
+  saveClinicalSession,
+  saveClinicalSessionDetails,
+  getClinicalSessionData,
 } from './services/dbService';
 import { logAuditEvent } from './services/auditService';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
@@ -113,7 +115,16 @@ function MainAppRouter() {
   // Active Patient Session
   const [currentPatient, setCurrentPatient] = useState<Patient>(() => {
     const list = storageService.getPatients();
-    return list.length > 0 ? list[0] : DEMO_PATIENTS[0];
+    return list.length > 0
+      ? list[0]
+      : {
+          id: 'pat-walkin',
+          name: 'Walk-in Patient',
+          age: 35,
+          gender: 'Other',
+          phone: '',
+          isExistingPatient: false,
+        };
   });
   const [selectedIntakeMode, setSelectedIntakeMode] = useState<IntakeMode>('modern');
   const [intakeAnswers, setIntakeAnswers] = useState<QuestionAnswer[]>([]);
@@ -125,7 +136,49 @@ function MainAppRouter() {
   // Generated Summary for active session
   const [generatedSummary, setGeneratedSummary] = useState<ClinicalSummary>(() => {
     const storedSummaries = storageService.getSummaries();
-    return storedSummaries['pat-001'] || DEMO_SUMMARIES['pat-001'];
+    const firstKey = Object.keys(storedSummaries)[0];
+    if (firstKey && storedSummaries[firstKey]) {
+      return storedSummaries[firstKey];
+    }
+    return {
+      id: `SUM-${Date.now()}`,
+      patientId: 'pat-walkin',
+      visitId: `VIS-${Date.now()}`,
+      tokenNumber: 'A-101',
+      timestamp: new Date().toISOString(),
+      isDraft: true,
+      status: 'DRAFT_PENDING_REVIEW',
+      intakeMode: 'modern',
+      patientInfo: {
+        name: 'Walk-in Patient',
+        age: 35,
+        gender: 'Other',
+        phone: '',
+        department: 'General Medicine',
+      },
+      chiefComplaint: '',
+      historyOfPresentIllness: '',
+      pastMedicalHistory: [],
+      pastSurgicalHistory: [],
+      currentMedications: [],
+      drugAllergies: [],
+      familyHistory: [],
+      personalHistory: {
+        diet: 'Mixed',
+        smoking: 'No',
+        alcohol: 'No',
+        sleep: 'Normal',
+        bowelBladder: 'Normal',
+      },
+      reviewOfSystems: [],
+      previousInvestigations: [],
+      documentSummary: '',
+      redFlags: [],
+      importantNotes: '',
+      isPhysicianVerified: false,
+      sourceDocumentIds: [],
+      intakeTimestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
   });
 
   // Keep storage in sync whenever lists change
@@ -146,7 +199,8 @@ function MainAppRouter() {
   }, [patientTimelineEvents]);
 
   // Doctor Workspace State
-  const [doctorSelectedPatientId, setDoctorSelectedPatientId] = useState<string>('pat-001');
+  const [doctorSelectedPatientId, setDoctorSelectedPatientId] = useState<string>('');
+  const [doctorSelectedSessionId, setDoctorSelectedSessionId] = useState<string>('');
 
   // Modals & Inactivity Guard
   const [urgentModalAlert, setUrgentModalAlert] = useState<RedFlagAlert | null>(null);
@@ -189,6 +243,40 @@ function MainAppRouter() {
     };
   }, [canAccessRoute, currentRole]);
 
+  // Cross-device session loader for Doctor Workspace
+  useEffect(() => {
+    if (
+      doctorSelectedSessionId &&
+      (!patients.some((p) => p.id === doctorSelectedPatientId) ||
+        !summaries[doctorSelectedPatientId])
+    ) {
+      getClinicalSessionData(doctorSelectedSessionId)
+        .then((data) => {
+          if (data) {
+            if (data.patient) {
+              setPatients((prev) =>
+                prev.some((p) => p.id === data.patient.id) ? prev : [data.patient, ...prev]
+              );
+            }
+            if (data.summary) {
+              setSummaries((prev) => ({
+                ...prev,
+                [data.patient?.id || doctorSelectedPatientId]: data.summary,
+              }));
+            }
+            if (data.redFlag) {
+              setRedFlags((prev) =>
+                prev.some((rf) => rf.patientId === (data.patient?.id || doctorSelectedPatientId))
+                  ? prev
+                  : [data.redFlag, ...prev]
+              );
+            }
+          }
+        })
+        .catch(() => {});
+    }
+  }, [doctorSelectedSessionId, doctorSelectedPatientId, patients, summaries]);
+
   // Kiosk Inactivity Privacy Guard
   useEffect(() => {
     // Only monitor idle timeout in active kiosk intake (not home or token screen)
@@ -207,8 +295,8 @@ function MainAppRouter() {
     const checkInterval = setInterval(() => {
       const now = Date.now();
       const idleTime = now - lastActivityRef.current;
-      // 45 seconds of inactivity -> show privacy countdown warning
-      if (idleTime > 45000 && !showIdleTimeoutModal) {
+      // 60 seconds of inactivity -> show privacy countdown warning ('Are you still there?')
+      if (idleTime > 60000 && !showIdleTimeoutModal) {
         setShowIdleTimeoutModal(true);
       }
     }, 3000);
@@ -316,7 +404,7 @@ function MainAppRouter() {
     setSummaries((prev) => ({ ...prev, [currentPatient.id]: generatedSummary }));
     setKioskStep('token');
 
-    // Async Firestore Persistence
+    // Async Firestore Persistence for multi-device clinical system
     try {
       await savePatientRecord(currentPatient);
       const encounterId = await createPatientEncounter(
@@ -326,6 +414,31 @@ function MainAppRouter() {
         selectedIntakeMode
       );
       await updateClinicalSummaryInDb(generatedSummary);
+
+      const newSessionId = `MK-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      await saveClinicalSession({
+        sessionId: newSessionId,
+        patientId: currentPatient.id,
+        patientName: currentPatient.name,
+        patientAge: currentPatient.age,
+        patientGender: currentPatient.gender,
+        chiefComplaint: generatedSummary.chiefComplaint || activeComplaintId || 'Clinical Intake Consultation',
+        status: 'completed',
+        summaryStatus: 'ready',
+        redFlagStatus: activeRedFlag ? (activeRedFlag.priority === 'URGENT' || activeRedFlag.priority === 'HIGH' ? 'urgent' : 'attention') : 'none',
+        hasRedFlag: Boolean(activeRedFlag),
+        tokenNumber: generatedSummary.tokenNumber || `A-${Math.floor(100 + Math.random() * 900)}`,
+        kioskStationId: 'Kiosk-01 (Ground Floor OPD)',
+        startedAt: new Date(Date.now() - 600000).toISOString(),
+        completedAt: new Date().toISOString(),
+      });
+
+      await saveClinicalSessionDetails(newSessionId, {
+        patient: currentPatient,
+        summary: generatedSummary,
+        redFlag: activeRedFlag,
+        intakeAnswers,
+      });
 
       logAuditEvent({
         action: 'PATIENT_CREATED',
@@ -364,6 +477,15 @@ function MainAppRouter() {
 
   const handleResetKiosk = () => {
     setKioskStep('home');
+    setCurrentPatient({
+      id: `pat-${Date.now()}`,
+      name: '',
+      age: 0,
+      gender: 'Male',
+      phone: '',
+      bloodGroup: 'B+',
+      isExistingPatient: false,
+    });
     setIntakeAnswers([]);
     setActiveRedFlag(null);
     setUploadedDocs([]);
@@ -399,19 +521,9 @@ function MainAppRouter() {
   return (
     <div
       className={`min-h-screen flex flex-col font-sans transition-colors relative overflow-x-hidden ${
-        highContrast ? 'bg-black text-yellow-300' : 'bg-[#EBF1F5] text-slate-900'
+        highContrast ? 'bg-black text-yellow-300' : 'bg-slate-100 text-slate-900'
       } ${getTextSizeWrapperClass()}`}
     >
-      {/* Frosted Glass Background Ambient Lighting Orbs */}
-      {!highContrast && (
-        <div className="fixed inset-0 z-0 opacity-60 pointer-events-none overflow-hidden">
-          <div className="absolute top-[-100px] left-[-100px] w-[450px] h-[450px] bg-blue-300 rounded-full blur-[120px]" />
-          <div className="absolute bottom-[-120px] right-[-50px] w-[550px] h-[550px] bg-emerald-200 rounded-full blur-[150px]" />
-          <div className="absolute top-[35%] left-[60%] w-[380px] h-[380px] bg-sky-200/60 rounded-full blur-[130px]" />
-          <div className="absolute top-[60%] left-[-80px] w-[350px] h-[350px] bg-teal-200/50 rounded-full blur-[120px]" />
-        </div>
-      )}
-
       {/* Top Application Header & Unified Navigation */}
       <RoleSwitcher
         currentView={isAccessBlocked ? blockedTarget : currentView}
@@ -564,10 +676,25 @@ function MainAppRouter() {
               <ErrorBoundary fallbackTitle="Doctor Workspace Error" fallbackMessage="Could not load patient workspace. Tap reload to return to the queue.">
                 {doctorSelectedPatientId ? (
                   <DoctorPatientWorkspace
-                    patient={patients.find((p) => p.id === doctorSelectedPatientId) || patients[0]}
+                    patient={
+                      patients.find((p) => p.id === doctorSelectedPatientId) || {
+                        id: doctorSelectedPatientId || 'pat-new',
+                        name: 'Intake Patient',
+                        age: 42,
+                        gender: 'Male',
+                        phone: '+91 98201 12345',
+                        bloodGroup: 'B+',
+                        isExistingPatient: false,
+                      }
+                    }
                     summary={summaries[doctorSelectedPatientId] || generatedSummary}
                     redFlag={redFlags.find((rf) => rf.patientId === doctorSelectedPatientId)}
-                    onBackToQueue={() => setDoctorSelectedPatientId('')}
+                    sessionId={doctorSelectedSessionId}
+                    documents={uploadedDocs.filter((d) => d.patientId === doctorSelectedPatientId)}
+                    onBackToQueue={() => {
+                      setDoctorSelectedPatientId('');
+                      setDoctorSelectedSessionId('');
+                    }}
                     onUpdateSummary={(updated) => {
                       setSummaries((prev) => ({ ...prev, [updated.patientId]: updated }));
                       updateClinicalSummaryInDb(updated).catch(() => {});
@@ -591,7 +718,10 @@ function MainAppRouter() {
                     patients={patients}
                     summaries={summaries}
                     redFlags={redFlags}
-                    onSelectPatient={(id) => setDoctorSelectedPatientId(id)}
+                    onSelectPatient={(id, sessId) => {
+                      setDoctorSelectedPatientId(id);
+                      setDoctorSelectedSessionId(sessId || '');
+                    }}
                     selectedPatientId={doctorSelectedPatientId}
                   />
                 )}
@@ -675,6 +805,32 @@ function MainAppRouter() {
           onResetSession={handleResetKiosk}
         />
       )}
+
+      {/* Institutional Public-Service Footer */}
+      <footer className="w-full bg-white border-t border-slate-200 py-3.5 px-4 sm:px-6 text-xs text-slate-500 relative z-20">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+          <div>
+            <p className="font-semibold text-slate-700">MediKiosk • Digital Clinical History & Document Assistance</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">Designed with institutional public-health service principles. All clinical summaries require physician review.</p>
+          </div>
+          <div className="flex items-center gap-4 text-[11px]">
+            <button
+              onClick={() => setIsHelpOpen(true)}
+              className="hover:text-slate-800 underline underline-offset-2 transition cursor-pointer"
+            >
+              Accessibility & Help
+            </button>
+            <span className="text-slate-300">•</span>
+            <button
+              onClick={() => setIsStaffLoginOpen(true)}
+              className="text-slate-400 hover:text-slate-700 font-medium transition cursor-pointer"
+              title="Authorized Clinical & Admin Access"
+            >
+              Staff Portal
+            </button>
+          </div>
+        </div>
+      </footer>
 
       {/* EMERGENCY NURSE CALL TOAST */}
       {isNurseAlertToast && (

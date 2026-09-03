@@ -1,5 +1,4 @@
 import { Patient, ClinicalSummary, RedFlagAlert, MedicalTimelineEvent } from '../types';
-import { DEMO_PATIENTS, DEMO_SUMMARIES, DEMO_RED_FLAGS, DEMO_TIMELINE_EVENTS } from '../data/demoPatients';
 
 const STORAGE_KEYS = {
   PATIENTS: 'medikiosk_patients_v1',
@@ -14,14 +13,14 @@ export const storageService = {
       const stored = localStorage.getItem(STORAGE_KEYS.PATIENTS);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (Array.isArray(parsed) && parsed.length > 0) {
+        if (Array.isArray(parsed)) {
           return parsed;
         }
       }
     } catch (e) {
       console.warn('Failed to load patients from localStorage:', e);
     }
-    return DEMO_PATIENTS;
+    return [];
   },
 
   savePatients(patients: Patient[]): void {
@@ -37,14 +36,14 @@ export const storageService = {
       const stored = localStorage.getItem(STORAGE_KEYS.SUMMARIES);
       if (stored) {
         const parsed = JSON.parse(stored);
-        if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        if (parsed && typeof parsed === 'object') {
           return parsed;
         }
       }
     } catch (e) {
       console.warn('Failed to load summaries from localStorage:', e);
     }
-    return DEMO_SUMMARIES;
+    return {};
   },
 
   saveSummaries(summaries: Record<string, ClinicalSummary>): void {
@@ -67,7 +66,7 @@ export const storageService = {
     } catch (e) {
       console.warn('Failed to load red flags from localStorage:', e);
     }
-    return DEMO_RED_FLAGS;
+    return [];
   },
 
   saveRedFlags(redFlags: RedFlagAlert[]): void {
@@ -90,7 +89,7 @@ export const storageService = {
     } catch (e) {
       console.warn('Failed to load timeline events from localStorage:', e);
     }
-    return DEMO_TIMELINE_EVENTS;
+    return [];
   },
 
   saveTimelineEvents(events: MedicalTimelineEvent[]): void {

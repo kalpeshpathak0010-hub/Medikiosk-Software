@@ -22,8 +22,8 @@ import {
   QuestionAnswer,
   ChiefComplaintId,
   IntakeMode,
+  DoctorAvailabilityStatus,
 } from '../types';
-import { DEMO_PATIENTS, DEMO_SUMMARIES, DEMO_RED_FLAGS, DEMO_TIMELINE_EVENTS } from '../data/demoPatients';
 
 // Firestore collection names
 export const COLLECTIONS = {
@@ -31,6 +31,9 @@ export const COLLECTIONS = {
   USERS: 'users',
   PATIENTS: 'patients',
   ENCOUNTERS: 'encounters',
+  CLINICAL_SESSIONS: 'clinicalSessions',
+  CLINICAL_HISTORY: 'clinicalHistory',
+  RED_FLAG_ASSESSMENTS: 'redFlagAssessments',
   CLINICAL_HISTORIES: 'clinicalHistories',
   AYUSH_ASSESSMENTS: 'ayushAssessments',
   DOCUMENTS: 'documents',
@@ -41,6 +44,42 @@ export const COLLECTIONS = {
   DIAGNOSTIC_REPORTS: 'diagnosticReports',
   AUDIT_LOGS: 'auditLogs',
 };
+
+export type ClinicalSessionStatus =
+  | 'in_progress'
+  | 'completed'
+  | 'summary_ready'
+  | 'under_review'
+  | 'verified'
+  | 'signed_off';
+
+export interface ClinicalSessionRecord {
+  sessionId: string; // e.g. MK-2026-000123
+  patientId: string;
+  patientName: string;
+  patientAge: number;
+  patientGender: string;
+  patientPhone?: string;
+  abhaId?: string;
+  tokenNumber: string;
+  department?: string;
+  chiefComplaint: string;
+  status: ClinicalSessionStatus;
+  redFlagStatus: 'none' | 'attention' | 'urgent';
+  hasRedFlag: boolean;
+  summaryStatus: 'none' | 'pending' | 'ready';
+  language?: string;
+  kioskStationId?: string;
+  startedAt: string;
+  completedAt?: string;
+  underReviewAt?: string;
+  verifiedAt?: string;
+  signedOffAt?: string;
+  doctorNotes?: string;
+  verifiedByDoctorName?: string;
+  createdAt?: any;
+  updatedAt?: any;
+}
 
 export interface FirestoreEncounter {
   id: string;
@@ -70,77 +109,21 @@ export interface AdminStats {
   ocrProcessedCount: number;
 }
 
-// Seed initial default patient data into Firestore if collections are empty
+// Seed initial default hospital facility data into Firestore if not present
 export async function seedInitialFirestoreData(): Promise<void> {
   try {
-    const patientsSnapshot = await getDocs(collection(db, COLLECTIONS.PATIENTS));
-    if (!patientsSnapshot.empty) {
-      return; // Already initialized
-    }
-
-    // 1. Seed Hospital
-    await setDoc(doc(db, COLLECTIONS.HOSPITALS, 'HOSP-DEL-001'), {
-      id: 'HOSP-DEL-001',
-      name: 'AIIMS New Delhi (Central OPD Network)',
-      code: 'AIIMS-DEL',
-      address: 'Sri Aurobindo Marg, Ansari Nagar, New Delhi, Delhi 110029',
-      contact: '+91-11-26588500',
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
-
-    // 2. Seed Patients
-    for (const patient of DEMO_PATIENTS) {
-      await setDoc(doc(db, COLLECTIONS.PATIENTS, patient.id), {
-        ...patient,
-        hospitalId: 'HOSP-DEL-001',
+    const hospitalDoc = await getDoc(doc(db, COLLECTIONS.HOSPITALS, 'HOSP-DEL-001'));
+    if (!hospitalDoc.exists()) {
+      await setDoc(doc(db, COLLECTIONS.HOSPITALS, 'HOSP-DEL-001'), {
+        id: 'HOSP-DEL-001',
+        name: 'AIIMS New Delhi (Central OPD Network)',
+        code: 'AIIMS-DEL',
+        address: 'Sri Aurobindo Marg, Ansari Nagar, New Delhi, Delhi 110029',
+        contact: '+91-11-26588500',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
-
-      // Seed corresponding encounter
-      const encounterId = `ENC-${patient.id}`;
-      const summary = DEMO_SUMMARIES[patient.id];
-      const hasRedFlag = DEMO_RED_FLAGS.some((rf) => rf.patientId === patient.id);
-
-      await setDoc(doc(db, COLLECTIONS.ENCOUNTERS, encounterId), {
-        id: encounterId,
-        patientId: patient.id,
-        hospitalId: 'HOSP-DEL-001',
-        doctorId: 'user-doc-01',
-        tokenNumber: summary?.tokenNumber || 'A-101',
-        department: (patient as any).department || 'General Medicine',
-        chiefComplaint: summary?.chiefComplaint || 'Routine Consultation',
-        intakeMode: summary?.intakeMode || 'modern',
-        status: summary?.isPhysicianVerified ? 'VERIFIED' : hasRedFlag ? 'WAITING' : 'WAITING',
-        triagePriority: hasRedFlag ? 'EMERGENCY' : 'STANDARD',
-        hasRedFlag,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-      });
-
-      // Seed Clinical Summary
-      if (summary) {
-        await setDoc(doc(db, COLLECTIONS.CLINICAL_SUMMARIES, summary.id || `SUM-${patient.id}`), {
-          ...summary,
-          encounterId,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
-      }
     }
-
-    // 3. Seed Audit Log
-    await setDoc(doc(collection(db, COLLECTIONS.AUDIT_LOGS)), {
-      action: 'SYSTEM_INITIALIZED',
-      role: 'ADMIN',
-      userId: 'system',
-      hospitalId: 'HOSP-DEL-001',
-      entityType: 'SYSTEM',
-      entityId: 'ROOT',
-      timestamp: new Date().toISOString(),
-      metadata: { note: 'MediKiosk database bootstrap initialized.' },
-    });
   } catch (error) {
     console.warn('[Firestore Seed] Notice: Proceeding with available access.', error);
   }
@@ -175,7 +158,7 @@ export function subscribeToPatients(callback: (patients: Patient[]) => void) {
       q,
       (snapshot) => {
         if (snapshot.empty) {
-          callback(DEMO_PATIENTS);
+          callback([]);
           return;
         }
         const list: Patient[] = [];
@@ -185,15 +168,92 @@ export function subscribeToPatients(callback: (patients: Patient[]) => void) {
         callback(list);
       },
       (err) => {
-        console.warn('Patients snapshot listener notice, using memory data:', err);
-        callback(DEMO_PATIENTS);
+        console.warn('Patients snapshot listener notice:', err);
+        callback([]);
       }
     );
   } catch (e) {
     console.warn('subscribeToPatients error:', e);
-    callback(DEMO_PATIENTS);
+    callback([]);
     return () => {};
   }
+}
+
+// -------------------------------------------------------------
+// DOCTOR AVAILABILITY OPERATIONS (REAL FIRESTORE)
+// -------------------------------------------------------------
+export interface DoctorAvailabilityRecord {
+  id: string;
+  uid: string;
+  name: string;
+  role: string;
+  department: string;
+  specialization?: string;
+  availabilityStatus: DoctorAvailabilityStatus;
+  roomNumber?: string;
+  registrationNumber?: string;
+  updatedAt?: any;
+}
+
+export function subscribeToAvailableDoctors(callback: (doctors: DoctorAvailabilityRecord[]) => void) {
+  try {
+    const q = query(collection(db, COLLECTIONS.USERS));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list: DoctorAvailabilityRecord[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data() as any;
+          if (data.role === 'DOCTOR') {
+            const rawStatus = data.availabilityStatus || data.status;
+            const status: DoctorAvailabilityStatus = (rawStatus === 'BUSY' ? 'BUSY' : rawStatus === 'OFFLINE' ? 'OFFLINE' : 'AVAILABLE');
+            // Allowed statuses: AVAILABLE, BUSY, OFFLINE.
+            // Only AVAILABLE and optionally BUSY doctors should be displayed publicly on kiosk.
+            // OFFLINE doctors should not appear on the kiosk.
+            if (status === 'AVAILABLE' || status === 'BUSY') {
+              list.push({
+                id: docSnap.id,
+                uid: data.uid || docSnap.id,
+                name: data.name || 'Dr. Medical Officer',
+                role: 'DOCTOR',
+                department: data.department || 'General OPD',
+                specialization: data.specialization || data.department || 'General Medicine',
+                availabilityStatus: status,
+                roomNumber: data.roomNumber || data.badgeNumber,
+                registrationNumber: data.registrationNumber,
+                updatedAt: data.updatedAt,
+              });
+            }
+          }
+        });
+        callback(list);
+      },
+      (err) => {
+        console.warn('Doctor availability listener notice:', err);
+        callback([]);
+      }
+    );
+  } catch (e) {
+    console.warn('subscribeToAvailableDoctors error:', e);
+    callback([]);
+    return () => {};
+  }
+}
+
+export async function updateDoctorStatusInDb(
+  userId: string,
+  availabilityStatus: DoctorAvailabilityStatus
+): Promise<void> {
+  const ref = doc(db, COLLECTIONS.USERS, userId);
+  await setDoc(
+    ref,
+    {
+      availabilityStatus,
+      status: availabilityStatus,
+      updatedAt: serverTimestamp(),
+    },
+    { merge: true }
+  );
 }
 
 // -------------------------------------------------------------
@@ -334,10 +394,10 @@ export function subscribeToSummaries(callback: (summaries: Record<string, Clinic
       q,
       (snapshot) => {
         if (snapshot.empty) {
-          callback(DEMO_SUMMARIES);
+          callback({});
           return;
         }
-        const record: Record<string, ClinicalSummary> = { ...DEMO_SUMMARIES };
+        const record: Record<string, ClinicalSummary> = {};
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as ClinicalSummary;
           if (data.patientId) {
@@ -348,12 +408,12 @@ export function subscribeToSummaries(callback: (summaries: Record<string, Clinic
       },
       (err) => {
         console.warn('Summaries listener notice:', err);
-        callback(DEMO_SUMMARIES);
+        callback({});
       }
     );
   } catch (e) {
     console.warn('subscribeToSummaries error:', e);
-    callback(DEMO_SUMMARIES);
+    callback({});
     return () => {};
   }
 }
@@ -372,6 +432,182 @@ export async function updateClinicalSummaryInDb(summary: ClinicalSummary): Promi
     );
   } catch (error) {
     console.error('Error updating summary in Firestore:', error);
+  }
+}
+
+// -------------------------------------------------------------
+// REAL-TIME MULTI-DEVICE CLINICAL SESSIONS
+// -------------------------------------------------------------
+export async function saveClinicalSession(session: ClinicalSessionRecord): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.CLINICAL_SESSIONS, session.sessionId);
+    await setDoc(
+      ref,
+      {
+        ...session,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.warn('saveClinicalSession notice:', error);
+  }
+}
+
+export async function updateClinicalSessionStatus(
+  sessionId: string,
+  status: ClinicalSessionStatus,
+  extraFields: Partial<ClinicalSessionRecord> = {}
+): Promise<void> {
+  try {
+    const ref = doc(db, COLLECTIONS.CLINICAL_SESSIONS, sessionId);
+    await setDoc(
+      ref,
+      {
+        status,
+        ...extraFields,
+        updatedAt: serverTimestamp(),
+      },
+      { merge: true }
+    );
+  } catch (error) {
+    console.warn('updateClinicalSessionStatus notice:', error);
+  }
+}
+
+export async function saveClinicalSessionDetails(
+  sessionId: string,
+  data: {
+    patientId?: string;
+    patient?: Patient;
+    clinicalHistory?: any;
+    redFlagAssessment?: any;
+    redFlag?: any;
+    documents?: any[];
+    ocrResults?: any[];
+    summary?: any;
+    intakeAnswers?: any[];
+  }
+): Promise<void> {
+  try {
+    const patientId = data.patientId || data.patient?.id || '';
+
+    if (data.patient) {
+      await setDoc(
+        doc(db, COLLECTIONS.PATIENTS, data.patient.id),
+        {
+          ...data.patient,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    if (data.clinicalHistory || data.intakeAnswers) {
+      await setDoc(
+        doc(db, COLLECTIONS.CLINICAL_HISTORY, sessionId),
+        {
+          sessionId,
+          patientId,
+          clinicalHistory: data.clinicalHistory || data.intakeAnswers,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    if (data.redFlagAssessment || data.redFlag) {
+      await setDoc(
+        doc(db, COLLECTIONS.RED_FLAG_ASSESSMENTS, sessionId),
+        {
+          sessionId,
+          patientId,
+          redFlag: data.redFlag || data.redFlagAssessment,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+
+    if (data.summary) {
+      await setDoc(
+        doc(db, COLLECTIONS.CLINICAL_SUMMARIES, sessionId),
+        {
+          sessionId,
+          patientId,
+          ...data.summary,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true }
+      );
+    }
+  } catch (error) {
+    console.warn('saveClinicalSessionDetails notice:', error);
+  }
+}
+
+export function subscribeToClinicalSessions(callback: (sessions: ClinicalSessionRecord[]) => void) {
+  try {
+    const q = query(collection(db, COLLECTIONS.CLINICAL_SESSIONS));
+    return onSnapshot(
+      q,
+      (snapshot) => {
+        const list: ClinicalSessionRecord[] = [];
+        snapshot.forEach((docSnap) => {
+          list.push(docSnap.data() as ClinicalSessionRecord);
+        });
+        // Sort newest first
+        list.sort((a, b) => (b.startedAt || '').localeCompare(a.startedAt || ''));
+        callback(list);
+      },
+      (err) => {
+        console.warn('Clinical sessions listener notice:', err);
+      }
+    );
+  } catch (e) {
+    console.warn('subscribeToClinicalSessions error:', e);
+    return () => {};
+  }
+}
+
+export async function getClinicalSessionData(sessionId: string): Promise<{
+  session: ClinicalSessionRecord | null;
+  patient: Patient | null;
+  history: any | null;
+  redFlags: any | null;
+  redFlag: any | null;
+  summary: any | null;
+}> {
+  try {
+    const [sessSnap, histSnap, rfSnap, sumSnap] = await Promise.all([
+      getDoc(doc(db, COLLECTIONS.CLINICAL_SESSIONS, sessionId)),
+      getDoc(doc(db, COLLECTIONS.CLINICAL_HISTORY, sessionId)),
+      getDoc(doc(db, COLLECTIONS.RED_FLAG_ASSESSMENTS, sessionId)),
+      getDoc(doc(db, COLLECTIONS.CLINICAL_SUMMARIES, sessionId)),
+    ]);
+
+    const session = sessSnap.exists() ? (sessSnap.data() as ClinicalSessionRecord) : null;
+    let patient: Patient | null = null;
+    if (session?.patientId) {
+      const patSnap = await getDoc(doc(db, COLLECTIONS.PATIENTS, session.patientId));
+      if (patSnap.exists()) {
+        patient = patSnap.data() as Patient;
+      }
+    }
+
+    const rfData = rfSnap.exists() ? rfSnap.data() : null;
+
+    return {
+      session,
+      patient,
+      history: histSnap.exists() ? histSnap.data() : null,
+      redFlags: rfData,
+      redFlag: rfData?.redFlag || rfData,
+      summary: sumSnap.exists() ? sumSnap.data() : null,
+    };
+  } catch (err) {
+    console.warn('getClinicalSessionData error:', err);
+    return { session: null, patient: null, history: null, redFlags: null, redFlag: null, summary: null };
   }
 }
 

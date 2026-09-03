@@ -1,15 +1,33 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Stethoscope, ShieldAlert, CheckCircle2, AlertTriangle, FileText, Clock, Edit3, Save, Printer, Download, Sparkles, User, HeartPulse, Leaf, ArrowLeft, ExternalLink } from 'lucide-react';
-import { ClinicalSummary, DocumentRecord, MedicalTimelineEvent, Patient, RedFlagAlert } from '../../types';
-import { DEMO_DOCUMENTS, DEMO_TIMELINE_EVENTS } from '../../data/demoPatients';
+import {
+  Stethoscope,
+  ShieldAlert,
+  CheckCircle2,
+  AlertTriangle,
+  FileText,
+  Clock,
+  Edit3,
+  Save,
+  Printer,
+  Download,
+  Sparkles,
+  User,
+  HeartPulse,
+  Leaf,
+  ArrowLeft,
+  ExternalLink,
+} from 'lucide-react';
+import { ClinicalSummary, DocumentRecord, Patient, RedFlagAlert } from '../../types';
 import { generateFhirDiagnosticReport } from '../../services/abdmService';
-import { savePhysicianSignOffAndFhir } from '../../services/dbService';
+import { savePhysicianSignOffAndFhir, updateClinicalSessionStatus } from '../../services/dbService';
 import { useAuth } from '../../context/AuthContext';
 
 interface DoctorPatientWorkspaceProps {
   patient: Patient;
   summary?: ClinicalSummary;
   redFlag?: RedFlagAlert;
+  sessionId?: string;
+  documents?: DocumentRecord[];
   onBackToQueue: () => void;
   onUpdateSummary: (updatedSummary: ClinicalSummary) => void;
   onOpenTimeline: () => void;
@@ -19,11 +37,14 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
   patient,
   summary,
   redFlag,
+  sessionId,
+  documents = [],
   onBackToQueue,
   onUpdateSummary,
   onOpenTimeline,
 }) => {
   const { currentUser } = useAuth();
+  
   // Safe summary fallbacks
   const safeSummary: ClinicalSummary = useMemo(() => ({
     id: summary?.id || `SUM-${patient?.id || '001'}`,
@@ -87,11 +108,6 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
     setIsEditing(false);
   }, [safeSummary]);
 
-  // Low confidence entities
-  const [verifiedEntities, setVerifiedEntities] = useState<Record<string, boolean>>({
-    'ent-002': true,
-  });
-
   // Verify and Sign state
   const [isSigned, setIsSigned] = useState(safeSummary.isPhysicianVerified);
   const [showSignModal, setShowSignModal] = useState(false);
@@ -108,8 +124,8 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
     setIsEditing(false);
   };
 
-  const handleSignAndConfirm = () => {
-    const docName = currentUser.name || 'Dr. Physician (MD)';
+  const handleVerifySummary = () => {
+    const docName = currentUser.name || 'Duty Medical Officer';
     const docReg = currentUser.registrationNumber || 'MCI-48921';
     const updated: ClinicalSummary = {
       ...safeSummary,
@@ -117,6 +133,35 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
       pastMedicalHistory: editedPmh.split(',').map((s) => s.trim()).filter(Boolean),
       physicianNotes: doctorNotes,
       isPhysicianVerified: true,
+      status: 'PHYSICIAN_VERIFIED',
+      verifiedByDoctorName: `${docName} (Reg: ${docReg})`,
+      verificationTimestamp: new Date().toISOString(),
+    };
+    onUpdateSummary(updated);
+    setIsSigned(true);
+    setSignSuccessToast(true);
+
+    if (sessionId) {
+      updateClinicalSessionStatus(sessionId, 'verified', {
+        verifiedByDoctorName: `${docName} (Reg: ${docReg})`,
+        verifiedAt: new Date().toISOString(),
+        doctorNotes,
+      }).catch((err) => console.warn('Session verification update notice:', err));
+    }
+
+    setTimeout(() => setSignSuccessToast(false), 4000);
+  };
+
+  const handleSignAndConfirm = () => {
+    const docName = currentUser.name || 'Duty Medical Officer';
+    const docReg = currentUser.registrationNumber || 'MCI-48921';
+    const updated: ClinicalSummary = {
+      ...safeSummary,
+      historyOfPresentIllness: editedHpi,
+      pastMedicalHistory: editedPmh.split(',').map((s) => s.trim()).filter(Boolean),
+      physicianNotes: doctorNotes,
+      isPhysicianVerified: true,
+      status: 'PHYSICIAN_VERIFIED',
       verifiedByDoctorName: `${docName} (Reg: ${docReg})`,
       verificationTimestamp: new Date().toISOString(),
     };
@@ -124,6 +169,14 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
     setIsSigned(true);
     setShowSignModal(false);
     setSignSuccessToast(true);
+
+    if (sessionId) {
+      updateClinicalSessionStatus(sessionId, 'signed_off', {
+        verifiedByDoctorName: `${docName} (Reg: ${docReg})`,
+        signedOffAt: new Date().toISOString(),
+        doctorNotes,
+      }).catch((err) => console.warn('Session sign-off update notice:', err));
+    }
 
     const fhirReport = generateFhirDiagnosticReport(patient, updated);
     savePhysicianSignOffAndFhir(
@@ -143,12 +196,12 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
   const fhirDiagnosticReport = generateFhirDiagnosticReport(patient, safeSummary);
 
   return (
-    <div className="flex-1 text-slate-800 p-4 sm:p-6 max-w-7xl mx-auto w-full">
+    <div className="flex-1 text-slate-800 p-4 sm:p-6 max-w-7xl mx-auto w-full space-y-5">
       {/* Top Breadcrumb & Status Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-3 pb-4 mb-4 border-b border-slate-200/80">
+      <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200">
         <button
           onClick={onBackToQueue}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 hover:bg-white text-slate-700 text-xs font-bold border border-white/80 shadow-xs transition active:scale-95 cursor-pointer"
+          className="flex items-center gap-2 px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold border border-slate-300 shadow-xs transition active:scale-95 cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>Back to OPD Queue</span>
@@ -156,143 +209,162 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
 
         <div className="flex items-center gap-2">
           {isSigned ? (
-            <span className="px-3.5 py-1.5 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-xs flex items-center gap-1.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-              <span>Signed & Verified by Dr. A. Varma ({safeSummary.verificationTimestamp?.slice(0, 10) || 'Today'})</span>
+            <span className="px-3 py-1 rounded-md text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-700" />
+              <span>Verified & Signed ({safeSummary.verificationTimestamp?.slice(0, 10) || 'Today'})</span>
             </span>
           ) : (
-            <span className="px-3.5 py-1.5 rounded-full text-xs font-black bg-amber-100 text-amber-800 border border-amber-200 shadow-xs flex items-center gap-1.5 animate-pulse">
-              <ShieldAlert className="w-4 h-4 text-amber-600" />
-              <span>Draft Intake • Awaiting Physician Sign-off</span>
+            <span className="px-3 py-1 rounded-md text-xs font-bold bg-amber-100 text-amber-800 border border-amber-200 flex items-center gap-1.5">
+              <ShieldAlert className="w-3.5 h-3.5 text-amber-700" />
+              <span>Draft Intake • Awaiting Physician Review</span>
             </span>
           )}
         </div>
       </div>
 
-      {/* Mandatory AI Draft Warning Banner */}
-      <div className="mb-6 p-4 rounded-2xl bg-amber-50/90 border-2 border-amber-300 text-amber-950 text-xs sm:text-sm font-bold flex items-center justify-between gap-3 shadow-xs backdrop-blur-md">
-        <div className="flex items-center gap-3">
-          <ShieldAlert className="w-6 h-6 text-amber-600 shrink-0" />
-          <span>
-            AI-GENERATED DRAFT — THIS SUMMARY MUST BE PERSONALLY REVIEWED, AMENDED AND CONFIRMED BY THE EXAMINING PHYSICIAN.
-          </span>
+      {/* Mandatory AI Verification Compliance Banner with [EDIT], [VERIFY], [SIGN OFF] */}
+      <div className="p-4 rounded-xl bg-amber-50 border border-amber-300 text-amber-950 flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div className="flex items-start sm:items-center gap-3">
+          <ShieldAlert className="w-5 h-5 text-amber-700 shrink-0 mt-0.5 sm:mt-0" />
+          <div>
+            <span className="font-bold text-xs sm:text-sm tracking-wide block uppercase text-amber-950">
+              AI-ASSISTED CLINICAL INTAKE — PHYSICIAN VERIFICATION REQUIRED
+            </span>
+            <span className="text-xs text-amber-900 font-medium">
+              Data collected at kiosk terminal. Review the findings, edit if necessary, and complete verification.
+            </span>
+          </div>
         </div>
 
-        {!isSigned && (
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto justify-end">
           <button
-            onClick={() => setShowSignModal(true)}
-            className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-black shadow-md uppercase tracking-wider shrink-0 transition active:scale-95 cursor-pointer"
+            id="btn-workspace-edit"
+            onClick={() => setIsEditing(!isEditing)}
+            className="px-3.5 py-1.5 rounded-lg bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-bold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
           >
-            Review & Sign Note
+            <Edit3 className="w-3.5 h-3.5 text-[#1e3a8a]" />
+            <span>{isEditing ? 'Cancel Edit' : 'Edit Note'}</span>
           </button>
-        )}
+
+          <button
+            id="btn-workspace-verify"
+            onClick={handleVerifySummary}
+            className={`px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer ${
+              isSigned
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                : 'bg-emerald-700 hover:bg-emerald-800 text-white'
+            }`}
+          >
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>{isSigned ? 'Verified ✓' : 'Verify'}</span>
+          </button>
+
+          <button
+            id="btn-workspace-signoff"
+            onClick={() => setShowSignModal(true)}
+            className="px-4 py-1.5 rounded-lg bg-[#1e3a8a] hover:bg-[#1e40af] text-white text-xs font-bold flex items-center gap-1.5 shadow-xs active:scale-95 transition cursor-pointer"
+          >
+            <Save className="w-3.5 h-3.5" />
+            <span>Sign Off & FHIR</span>
+          </button>
+        </div>
       </div>
 
       {/* Urgent Red Flag Alert (if present) */}
       {redFlag && (
-        <div className="mb-6 p-4 rounded-2xl bg-rose-50/90 border-2 border-rose-400 text-rose-950 flex items-start gap-3.5 shadow-md backdrop-blur-md">
-          <div className="w-10 h-10 rounded-xl bg-rose-600 flex items-center justify-center shrink-0 shadow-md">
-            <HeartPulse className="w-6 h-6 text-white" />
+        <div className="p-4 rounded-xl bg-rose-50 border-2 border-rose-400 text-rose-950 flex items-start gap-3">
+          <div className="w-9 h-9 rounded-lg bg-rose-700 flex items-center justify-center shrink-0">
+            <HeartPulse className="w-5 h-5 text-white" />
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-xs font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-rose-600 text-white">
+              <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-rose-700 text-white">
                 TRIAGE RED-FLAG ALERT
               </span>
-              <span className="text-xs font-black text-rose-800">
+              <span className="text-xs font-bold text-rose-800">
                 {((redFlag as any).priority || (redFlag as any).severity || 'URGENT').toUpperCase()} PRIORITY
               </span>
             </div>
-            <p className="text-sm font-black text-rose-950 mt-1">
+            <p className="text-sm font-bold text-rose-950 mt-1">
               {redFlag.message?.en || redFlag.description || 'Clinical red-flag indicator detected.'}
             </p>
-            <p className="text-xs text-rose-800 font-semibold mt-0.5">
-              <strong>Physician Action Required:</strong>{' '}
-              {redFlag.suggestedAction?.en || 'Immediate clinical evaluation and vital signs stabilization.'}
+            <p className="text-xs text-rose-800 font-medium mt-0.5">
+              Protocol: {redFlag.suggestedAction?.en || 'Immediate clinical evaluation and vital signs stabilization.'}
             </p>
           </div>
         </div>
       )}
 
       {/* Patient Header Demographics Card */}
-      <div className="mb-6 p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
+      <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs">
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-blue-600 to-teal-500 flex items-center justify-center font-black text-2xl text-white shadow-lg">
+          <div className="flex items-center gap-3.5">
+            <div className="w-12 h-12 rounded-lg bg-[#1e3a8a] text-white flex items-center justify-center font-bold text-xl shadow-xs">
               {patient.name.slice(0, 1)}
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h2 className="text-2xl font-black text-blue-950">{patient.name}</h2>
-                <span className="text-xs font-mono font-bold px-2.5 py-0.5 rounded-lg bg-blue-950 text-teal-300 shadow-xs">
+                <h2 className="text-xl font-bold text-slate-900">{patient.name}</h2>
+                <span className="text-xs font-mono font-bold px-2 py-0.5 rounded bg-slate-800 text-white">
                   Token: {safeSummary.tokenNumber || 'A-127'}
                 </span>
-                <span className="text-xs px-2.5 py-0.5 rounded-lg bg-blue-100 text-blue-800 border border-blue-200 font-bold">
+                <span className="text-xs px-2 py-0.5 rounded bg-blue-50 text-blue-900 border border-blue-200 font-bold">
                   {patient.gender} • {patient.age} yrs
                 </span>
               </div>
-              <p className="text-xs text-slate-600 font-mono flex flex-wrap items-center gap-3 font-medium">
-                <span>ABHA ID: <strong className="text-blue-900 font-bold">{patient.abhaId || patient.phone}</strong></span>
+              <p className="text-xs text-slate-500 font-mono flex flex-wrap items-center gap-3">
+                <span>ABHA: <strong className="text-slate-800 font-bold">{patient.abhaId || patient.phone || 'Walk-in'}</strong></span>
                 <span>Phone: {patient.phone}</span>
-                <span>Blood: <strong className="text-rose-600 font-bold">{patient.bloodGroup || 'B+'}</strong></span>
-                <span>Intake Station: Kiosk #3 (OPD Ground Floor)</span>
+                <span>Blood: <strong className="text-slate-800 font-bold">{patient.bloodGroup || 'B+'}</strong></span>
               </p>
             </div>
           </div>
 
-          {/* Quick Actions */}
+          {/* Quick Navigation Action */}
           <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onOpenTimeline}
-              className="px-4 py-2 rounded-xl bg-indigo-50 hover:bg-indigo-100 border border-indigo-200 text-indigo-900 text-xs font-black flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
+              className="px-3.5 py-1.5 rounded-lg bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-800 text-xs font-bold flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
             >
-              <Clock className="w-4 h-4 text-indigo-600" />
-              <span>Longitudinal Timeline</span>
-            </button>
-
-            <button
-              onClick={() => setIsEditing(!isEditing)}
-              className="px-4 py-2 rounded-xl bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 text-xs font-black flex items-center gap-1.5 shadow-xs transition active:scale-95 cursor-pointer"
-            >
-              <Edit3 className="w-4 h-4 text-teal-600" />
-              <span>{isEditing ? 'Cancel Edit' : 'Edit Intake Fields'}</span>
+              <Clock className="w-4 h-4 text-[#1e3a8a]" />
+              <span>Medical Timeline</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Tab Switcher */}
-      <div className="flex items-center gap-2 border-b border-slate-200/80 pb-3 mb-6 overflow-x-auto text-xs font-black">
+      {/* Workspace Tabs */}
+      <div className="flex items-center gap-1.5 border-b border-slate-200 overflow-x-auto text-xs font-bold pb-2">
         <button
           onClick={() => setActiveTab('clinical_summary')}
-          className={`px-4 py-2 rounded-xl transition cursor-pointer ${
+          className={`px-3.5 py-1.5 rounded-lg transition uppercase tracking-wider text-[11px] cursor-pointer ${
             activeTab === 'clinical_summary'
-              ? 'bg-blue-600 text-white shadow-md'
-              : 'bg-white/80 text-slate-600 hover:text-slate-900 border border-white/80'
+              ? 'bg-[#1e3a8a] text-white'
+              : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
           }`}
         >
-          Structured Clinical Summary
+          Clinical Summary & Intake
         </button>
 
         <button
           onClick={() => setActiveTab('ocr_docs')}
-          className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3.5 py-1.5 rounded-lg transition uppercase tracking-wider text-[11px] flex items-center gap-1.5 cursor-pointer ${
             activeTab === 'ocr_docs'
-              ? 'bg-amber-600 text-white shadow-md'
-              : 'bg-white/80 text-slate-600 hover:text-slate-900 border border-white/80'
+              ? 'bg-[#1e3a8a] text-white'
+              : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
           }`}
         >
           <FileText className="w-3.5 h-3.5" />
-          <span>Scanned Documents & OCR (2)</span>
+          <span>Uploaded Records ({documents.length})</span>
         </button>
 
         {safeSummary.ayushHistory && (
           <button
             onClick={() => setActiveTab('ayush_pariksha')}
-            className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+            className={`px-3.5 py-1.5 rounded-lg transition uppercase tracking-wider text-[11px] flex items-center gap-1.5 cursor-pointer ${
               activeTab === 'ayush_pariksha'
-                ? 'bg-emerald-600 text-white shadow-md'
-                : 'bg-white/80 text-slate-600 hover:text-slate-900 border border-white/80'
+                ? 'bg-emerald-700 text-white'
+                : 'bg-white text-emerald-800 hover:text-emerald-950 border border-emerald-200'
             }`}
           >
             <Leaf className="w-3.5 h-3.5" />
@@ -302,446 +374,296 @@ export const DoctorPatientWorkspace: React.FC<DoctorPatientWorkspaceProps> = ({
 
         <button
           onClick={() => setActiveTab('fhir_json')}
-          className={`px-4 py-2 rounded-xl transition flex items-center gap-1.5 cursor-pointer ${
+          className={`px-3.5 py-1.5 rounded-lg transition uppercase tracking-wider text-[11px] cursor-pointer ${
             activeTab === 'fhir_json'
-              ? 'bg-purple-600 text-white shadow-md'
-              : 'bg-white/80 text-slate-600 hover:text-slate-900 border border-white/80'
+              ? 'bg-[#1e3a8a] text-white'
+              : 'bg-white text-slate-600 hover:text-slate-900 border border-slate-200'
           }`}
         >
-          <Sparkles className="w-3.5 h-3.5 text-purple-300" />
-          <span>ABDM FHIR Resource JSON</span>
+          ABDM FHIR Resource
         </button>
       </div>
 
-      {/* TAB 1: Structured Clinical Summary */}
+      {/* TAB 1: Clinical Summary & Intake Form */}
       {activeTab === 'clinical_summary' && (
-        <div className="space-y-6">
-          {/* Section 1: Chief Complaint & HPI */}
-          <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200/80">
-              <h3 className="text-base font-black text-blue-950 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-teal-500"></span>
-                1. Chief Complaint & History of Present Illness (HPI)
-              </h3>
-              <span className="text-xs text-slate-500 font-semibold">Audio/Touch Intake Recorded</span>
+        <div className="space-y-4">
+          {/* Chief Complaint & HPI */}
+          <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-4">
+            <div>
+              <span className="text-xs text-slate-500 uppercase font-bold tracking-wider block mb-1">
+                1. Chief Complaint
+              </span>
+              <p className="text-base font-bold text-slate-900">
+                {safeSummary.chiefComplaint}
+              </p>
             </div>
 
-            <div className="space-y-3">
-              <div>
-                <span className="text-xs text-slate-500 font-black uppercase block">Chief Complaint</span>
-                <p className="text-lg font-black text-teal-800 mt-0.5">{safeSummary.chiefComplaint}</p>
-              </div>
-
-              <div>
-                <span className="text-xs text-slate-500 font-black uppercase block">History of Present Illness (HPI)</span>
-                {isEditing ? (
-                  <textarea
-                    rows={4}
-                    value={editedHpi}
-                    onChange={(e) => setEditedHpi(e.target.value)}
-                    className="w-full p-3.5 mt-1 rounded-2xl bg-white border border-slate-300 text-slate-900 text-sm focus:outline-none focus:border-blue-500 font-sans shadow-inner"
-                  />
-                ) : (
-                  <p className="text-sm text-slate-700 mt-1 leading-relaxed bg-white/60 p-4 rounded-2xl border border-slate-200/80 font-medium">
-                    {safeSummary.historyOfPresentIllness}
-                  </p>
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-xs text-slate-500 uppercase font-bold tracking-wider block">
+                  2. History of Present Illness (HPI)
+                </span>
+                {isEditing && (
+                  <span className="text-[11px] font-bold text-blue-700">Editing Enabled</span>
                 )}
               </div>
-            </div>
-          </div>
 
-          {/* Section 2: Past Medical & Surgical History */}
-          <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200/80">
-              <h3 className="text-base font-black text-blue-950 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-blue-500"></span>
-                2. Past Medical & Surgical History
-              </h3>
+              {isEditing ? (
+                <textarea
+                  value={editedHpi}
+                  onChange={(e) => setEditedHpi(e.target.value)}
+                  rows={4}
+                  className="w-full p-3 rounded-lg border border-blue-400 bg-blue-50/40 text-xs text-slate-900 leading-relaxed font-medium focus:outline-none"
+                />
+              ) : (
+                <div className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 text-xs text-slate-800 leading-relaxed font-medium">
+                  {editedHpi}
+                </div>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <span className="text-xs text-slate-500 font-black uppercase block mb-1.5">
-                  Past Medical Conditions
-                </span>
-                {isEditing ? (
-                  <input
-                    type="text"
-                    value={editedPmh}
-                    onChange={(e) => setEditedPmh(e.target.value)}
-                    className="w-full p-3 rounded-xl bg-white border border-slate-300 text-slate-900 text-sm shadow-inner"
-                  />
-                ) : (
-                  <div className="flex flex-wrap gap-2">
-                    {safeSummary.pastMedicalHistory.map((pmh, idx) => (
+            {/* Past Medical History */}
+            <div>
+              <span className="text-xs text-slate-500 uppercase font-bold tracking-wider block mb-1.5">
+                3. Past Medical & Surgical History
+              </span>
+              {isEditing ? (
+                <input
+                  type="text"
+                  value={editedPmh}
+                  onChange={(e) => setEditedPmh(e.target.value)}
+                  placeholder="Enter conditions separated by commas..."
+                  className="w-full p-2 rounded-lg border border-blue-400 bg-blue-50/40 text-xs text-slate-900 font-medium focus:outline-none"
+                />
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {safeSummary.pastMedicalHistory.length > 0 ? (
+                    safeSummary.pastMedicalHistory.map((item, idx) => (
                       <span
                         key={idx}
-                        className="px-3.5 py-1 rounded-xl bg-blue-50 border border-blue-200 text-blue-900 text-xs font-black shadow-xs"
+                        className="px-2.5 py-1 rounded bg-slate-100 border border-slate-200 text-xs font-semibold text-slate-800"
                       >
-                        {pmh}
+                        {item}
                       </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div>
-                <span className="text-xs text-slate-500 font-black uppercase block mb-1.5">
-                  Past Surgical / Interventions
-                </span>
-                <div className="flex flex-wrap gap-2">
-                  {safeSummary.pastSurgicalHistory.map((psh, idx) => (
-                    <span
-                      key={idx}
-                      className="px-3.5 py-1 rounded-xl bg-indigo-50 border border-indigo-200 text-indigo-900 text-xs font-black shadow-xs"
-                    >
-                      {psh}
-                    </span>
-                  ))}
+                    ))
+                  ) : (
+                    <span className="text-xs text-slate-500 italic">No previous chronic conditions reported.</span>
+                  )}
                 </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 3: Current Medications (With OCR Confidence Tags) */}
-          <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
-            <div className="flex items-center justify-between pb-3 mb-4 border-b border-slate-200/80">
-              <h3 className="text-base font-black text-blue-950 uppercase tracking-wider flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                3. Current Medications & OCR Confidence Calibration
-              </h3>
-              <span className="text-xs text-emerald-700 font-bold">Extracted from prescriptions</span>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {safeSummary.currentMedications.map((med, idx) => {
-                const isLow = med.confidenceScore && med.confidenceScore < 75 && !med.isPhysicianVerified;
-                return (
-                  <div
-                    key={idx}
-                    className={`p-4 rounded-2xl border transition ${
-                      isLow
-                        ? 'bg-amber-50/90 border-amber-300 text-amber-950'
-                        : 'bg-white/70 border-white/80 text-slate-800 shadow-xs'
-                    }`}
-                  >
-                    <div className="flex items-center justify-between mb-1">
-                      <h4 className="font-black text-sm text-slate-900">{med.name}</h4>
-                      <span
-                        className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full ${
-                          isLow ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-100 text-slate-600 border border-slate-200'
-                        }`}
-                      >
-                        {med.confidenceScore || 95}% OCR
-                      </span>
-                    </div>
-
-                    <p className="text-xs text-slate-600 font-medium">
-                      <strong>Dose:</strong> {med.dose} • <strong>Freq:</strong> {med.frequency}
-                    </p>
-                    <p className="text-[11px] text-slate-500 mt-1 font-medium">For: {med.indication}</p>
-
-                    {isLow && (
-                      <div className="mt-2 pt-2 border-t border-amber-200 flex items-center justify-between">
-                        <span className="text-[10px] text-amber-800 font-black">Uncertain handwriting</span>
-                        <button
-                          onClick={() => {
-                            med.isPhysicianVerified = true;
-                            med.confidenceScore = 98;
-                            handleSaveEdits();
-                          }}
-                          className="px-2.5 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 text-[10px] font-black transition cursor-pointer"
-                        >
-                          Confirm Dose
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Section 4: Allergies, Family History & Lifestyle */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Allergies */}
-            <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
-              <span className="text-xs text-rose-700 font-black uppercase tracking-wider block mb-3">
-                4. Known Drug Allergies
+            {/* Physician Notes Section */}
+            <div className="pt-3 border-t border-slate-100">
+              <span className="text-xs text-slate-700 font-bold uppercase tracking-wider block mb-1">
+                Physician Consultation Notes & Prescription Directives:
               </span>
-              {safeSummary.drugAllergies.length > 0 ? (
+              <textarea
+                value={doctorNotes}
+                onChange={(e) => setDoctorNotes(e.target.value)}
+                placeholder="Enter clinical examination notes, diagnostic orders, or advice..."
+                rows={3}
+                className="w-full p-3 rounded-lg border border-slate-300 bg-white text-xs text-slate-900 font-medium focus:outline-none focus:border-[#1e3a8a]"
+              />
+              {isEditing && (
+                <button
+                  onClick={handleSaveEdits}
+                  className="mt-2 px-4 py-1.5 rounded-lg bg-[#1e3a8a] hover:bg-[#1e40af] text-white text-xs font-bold cursor-pointer"
+                >
+                  Save Notes
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Current Medications & Allergies */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Medications */}
+            <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-700 font-bold uppercase tracking-wider block mb-3">
+                Current Reported Medications
+              </span>
+              {safeSummary.currentMedications.length > 0 ? (
                 <div className="space-y-2">
-                  {safeSummary.drugAllergies.map((all, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3 rounded-2xl bg-rose-50 border border-rose-200 text-rose-900 text-xs font-black flex items-center gap-2 shadow-xs"
-                    >
-                      <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
-                      <span>{all}</span>
+                  {safeSummary.currentMedications.map((med, idx) => (
+                    <div key={idx} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs">
+                      <div className="flex justify-between font-bold text-slate-900">
+                        <span>{med.name}</span>
+                        <span className="text-slate-500 font-normal">{med.dose}</span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 mt-0.5">Frequency: {med.frequency}</p>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 italic">No drug allergies reported during intake.</p>
+                <p className="text-xs text-slate-500 italic">No regular daily medications reported.</p>
               )}
             </div>
 
-            {/* Family History */}
-            <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
-              <span className="text-xs text-slate-600 font-black uppercase tracking-wider block mb-3">
-                5. Family Medical History
+            {/* Allergies & Lifestyle */}
+            <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs">
+              <span className="text-xs text-slate-700 font-bold uppercase tracking-wider block mb-3">
+                Allergies & Lifestyle
               </span>
-              <div className="space-y-1.5 text-xs text-slate-700 font-medium">
-                {safeSummary.familyHistory.map((fh, idx) => (
-                  <p key={idx}>• {fh}</p>
-                ))}
-              </div>
-            </div>
-
-            {/* Personal History */}
-            <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl ring-1 ring-slate-900/5">
-              <span className="text-xs text-slate-600 font-black uppercase tracking-wider block mb-3">
-                6. Personal & Habits
-              </span>
-              <div className="space-y-1 text-xs text-slate-700 font-medium">
-                <p><strong>Diet:</strong> {safeSummary.personalHistory.diet}</p>
-                <p><strong>Smoking:</strong> {safeSummary.personalHistory.smoking}</p>
-                <p><strong>Alcohol:</strong> {safeSummary.personalHistory.alcohol}</p>
-                <p><strong>Sleep / Bowel:</strong> {safeSummary.personalHistory.sleep} / {safeSummary.personalHistory.bowelBladder || safeSummary.personalHistory.bowelHabits || 'Regular'}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Section 5: Doctor Notes & Final Assessment */}
-          <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-blue-300 shadow-xl ring-1 ring-slate-900/5">
-            <div className="flex items-center justify-between pb-3 mb-3 border-b border-slate-200/80">
-              <h3 className="text-base font-black text-blue-950 uppercase tracking-wider flex items-center gap-2">
-                <Stethoscope className="w-5 h-5 text-blue-600" />
-                7. Physician Consultation Notes & Clinical Assessment
-              </h3>
-              {isEditing && (
-                <button
-                  onClick={handleSaveEdits}
-                  className="px-3 py-1 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-black flex items-center gap-1 transition cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Save Notes</span>
-                </button>
-              )}
-            </div>
-
-            <textarea
-              rows={4}
-              value={doctorNotes}
-              onChange={(e) => setDoctorNotes(e.target.value)}
-              placeholder="Type clinical impression, provisional diagnosis, prescribed investigations (e.g. ECG, Troponin-I) and prescription plan..."
-              className="w-full p-4 rounded-2xl bg-white border border-slate-300 text-slate-900 text-sm focus:outline-none focus:border-blue-500 shadow-inner font-medium"
-            />
-
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 mt-4 pt-4 border-t border-slate-200/80">
-              <div className="text-xs text-slate-600 font-medium">
-                <span>Signing Physician: <strong className="text-slate-900">Dr. A. Varma, MD (Reg: MCI-48921)</strong></span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={() => setShowSignModal(true)}
-                  className="px-6 py-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm shadow-xl shadow-emerald-600/30 flex items-center gap-2 transition active:scale-95 cursor-pointer"
-                >
-                  <CheckCircle2 className="w-5 h-5" />
-                  <span>{isSigned ? 'Re-Sign & Update Note' : 'Verify & Sign Clinical Note'}</span>
-                </button>
+              <div className="space-y-2 text-xs">
+                <div>
+                  <strong className="text-slate-900">Allergies:</strong>{' '}
+                  {safeSummary.drugAllergies.length > 0 ? (
+                    <span className="text-rose-700 font-bold">{safeSummary.drugAllergies.join(', ')}</span>
+                  ) : (
+                    <span className="text-slate-500">None reported</span>
+                  )}
+                </div>
+                <div>
+                  <strong className="text-slate-900">Diet:</strong> {safeSummary.personalHistory?.diet || 'Mixed'}
+                </div>
+                <div>
+                  <strong className="text-slate-900">Smoking / Tobacco:</strong> {safeSummary.personalHistory?.smoking || 'No'}
+                </div>
+                <div>
+                  <strong className="text-slate-900">Alcohol:</strong> {safeSummary.personalHistory?.alcohol || 'No'}
+                </div>
               </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* TAB 2: Scanned Documents & OCR Inspector */}
+      {/* TAB 2: Uploaded Records */}
       {activeTab === 'ocr_docs' && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {DEMO_DOCUMENTS.map((doc) => (
-              <div key={doc.id} className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl space-y-4">
-                <div className="flex items-center justify-between pb-3 border-b border-slate-200/80">
-                  <div>
-                    <h3 className="font-black text-blue-950 text-base">{doc.title}</h3>
-                    <p className="text-xs text-slate-500 font-medium">{doc.hospitalName} • {doc.date}</p>
+        <div className="space-y-4">
+          {documents.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {documents.map((doc) => (
+                <div key={doc.id} className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs space-y-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                    <div>
+                      <h3 className="font-bold text-slate-900 text-sm">{doc.title}</h3>
+                      <p className="text-xs text-slate-500">{doc.hospitalName || 'Health Center'} • {doc.date}</p>
+                    </div>
+                    <span className="px-2 py-0.5 rounded text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      OCR: {doc.confidenceScore}% ✓
+                    </span>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-black bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-xs">
-                    OCR: {doc.confidenceScore}% ✓
-                  </span>
-                </div>
 
-                {/* Simulated Document Preview Area */}
-                <div className="h-44 rounded-2xl bg-slate-950 p-4 border border-slate-800 overflow-y-auto text-xs font-mono text-slate-300 leading-relaxed shadow-inner">
-                  <div className="text-[11px] text-teal-400 mb-2 uppercase font-bold tracking-wider">
-                    --- Raw OCR Stream Output ---
-                  </div>
-                  <p>{doc.rawOcrText}</p>
+                  {doc.rawOcrText && (
+                    <div className="h-32 rounded-lg bg-slate-900 p-3 border border-slate-800 overflow-y-auto text-xs font-mono text-slate-300">
+                      {doc.rawOcrText}
+                    </div>
+                  )}
                 </div>
-
-                {/* Extracted Entities Table */}
-                <div>
-                  <span className="text-xs uppercase font-black text-slate-600 block mb-2">
-                    Structured Clinical Entities:
-                  </span>
-                  <div className="space-y-2">
-                    {doc.extractedEntities.map((ent) => (
-                      <div
-                        key={ent.id}
-                        className="p-3 rounded-2xl bg-white/70 border border-slate-200/80 flex items-center justify-between text-xs shadow-xs"
-                      >
-                        <div>
-                          <span className="font-bold text-slate-900">{ent.name}</span>
-                          {ent.dose && <span className="ml-2 text-slate-500 font-mono">{ent.dose} {ent.frequency}</span>}
-                          {ent.value && <span className="ml-2 text-teal-700 font-bold">{ent.value} {ent.unit}</span>}
-                        </div>
-                        <span className="font-mono text-[11px] text-slate-500 font-bold">{ent.confidence}% conf</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-xs text-slate-600">
+              <FileText className="w-8 h-8 text-slate-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-slate-800">
+                No physical documents scanned for this patient encounter.
+              </p>
+              <p className="text-slate-500 mt-1">
+                If the patient brought paper prescriptions or lab reports, they can be captured at the scanner kiosk.
+              </p>
+            </div>
+          )}
         </div>
       )}
 
       {/* TAB 3: AYUSH Pariksha */}
       {activeTab === 'ayush_pariksha' && safeSummary.ayushHistory && (
-        <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl space-y-6">
-          <div className="flex items-center gap-3 pb-3 border-b border-slate-200/80">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-700">
-              <Leaf className="w-6 h-6" />
-            </div>
+        <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
+            <Leaf className="w-5 h-5 text-emerald-700" />
             <div>
-              <h3 className="text-lg font-black text-blue-950">Dashavidha Pariksha (दशविध परीक्षा Clinical Intake)</h3>
-              <p className="text-xs text-slate-500 font-medium">Ayurvedic Rogi-Roga Pariksha parameters gathered at kiosk</p>
+              <h3 className="text-sm font-bold text-slate-900">Dashavidha Pariksha (दशविध परीक्षा)</h3>
+              <p className="text-xs text-slate-500">Ayurvedic Rogi-Roga Pariksha parameters gathered at kiosk</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-              <span className="text-xs text-slate-500 uppercase font-black block">1. Prakriti (Constitutional Tendency)</span>
-              <p className="text-base font-black text-emerald-800 mt-1">{safeSummary.ayushHistory.prakriti.primaryDosha}</p>
-              <p className="text-xs text-slate-600 mt-1 font-medium">{safeSummary.ayushHistory.prakriti.details}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] text-slate-500 uppercase font-bold block">1. Prakriti</span>
+              <p className="text-sm font-bold text-emerald-800 mt-0.5">{safeSummary.ayushHistory.prakriti.primaryDosha}</p>
+              <p className="text-xs text-slate-600 mt-0.5">{safeSummary.ayushHistory.prakriti.details}</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-              <span className="text-xs text-slate-500 uppercase font-black block">2. Agni (Digestive Capacity)</span>
-              <p className="text-base font-black text-slate-900 mt-1">{safeSummary.ayushHistory.agni}</p>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] text-slate-500 uppercase font-bold block">2. Agni (Digestive)</span>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{safeSummary.ayushHistory.agni}</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-              <span className="text-xs text-slate-500 uppercase font-black block">3. Koshtha (Bowel Pattern)</span>
-              <p className="text-base font-black text-slate-900 mt-1">{safeSummary.ayushHistory.koshtha}</p>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] text-slate-500 uppercase font-bold block">3. Koshtha (Bowel)</span>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{safeSummary.ayushHistory.koshtha}</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-              <span className="text-xs text-slate-500 uppercase font-black block">4. Dhatu Sara (Tissue Integrity)</span>
-              <p className="text-base font-black text-slate-900 mt-1">{safeSummary.ayushHistory.sara}</p>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] text-slate-500 uppercase font-bold block">4. Dhatu Sara</span>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{safeSummary.ayushHistory.sara}</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-              <span className="text-xs text-slate-500 uppercase font-black block">5. Sattva (Mental Resilience)</span>
-              <p className="text-base font-black text-slate-900 mt-1">{safeSummary.ayushHistory.sattva}</p>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] text-slate-500 uppercase font-bold block">5. Sattva (Mental)</span>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{safeSummary.ayushHistory.sattva}</p>
             </div>
 
-            <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-              <span className="text-xs text-slate-500 uppercase font-black block">6. Ahara & Vyayama Shakti</span>
-              <p className="text-base font-black text-slate-900 mt-1">{safeSummary.ayushHistory.aharaShakti} / {safeSummary.ayushHistory.vyayamaShakti}</p>
+            <div className="p-3 rounded-lg bg-slate-50 border border-slate-200">
+              <span className="text-[11px] text-slate-500 uppercase font-bold block">6. Ahara & Vyayama Shakti</span>
+              <p className="text-sm font-bold text-slate-900 mt-0.5">{safeSummary.ayushHistory.aharaShakti} / {safeSummary.ayushHistory.vyayamaShakti}</p>
             </div>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-white/70 border border-slate-200/80 shadow-xs">
-            <span className="text-xs text-slate-500 uppercase font-black block mb-1">Ahara-Vihara & Nidana Observations</span>
-            <p className="text-sm text-slate-800 font-medium">{safeSummary.ayushHistory.nidanaNotes || 'None recorded'}</p>
           </div>
         </div>
       )}
 
       {/* TAB 4: ABDM FHIR Resource JSON */}
       {activeTab === 'fhir_json' && (
-        <div className="p-6 rounded-[32px] bg-white/80 backdrop-blur-xl border-2 border-white/60 shadow-xl space-y-4">
-          <div className="flex items-center justify-between pb-3 border-b border-slate-200/80">
+        <div className="p-5 rounded-xl bg-white border border-slate-200 shadow-xs space-y-3">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
             <div>
-              <h3 className="text-base font-black text-blue-950">ABDM FHIR DiagnosticReport Payload</h3>
-              <p className="text-xs text-slate-500 font-medium">HL7 FHIR R4 Bundle compliant with National Digital Health Mission specifications</p>
+              <h3 className="text-sm font-bold text-slate-900">ABDM FHIR DiagnosticReport Payload</h3>
+              <p className="text-xs text-slate-500">HL7 FHIR R4 Bundle compliant with National Digital Health specifications</p>
             </div>
             <button
               onClick={() => {
                 navigator.clipboard.writeText(JSON.stringify(fhirDiagnosticReport, null, 2));
-                alert('FHIR JSON copied to clipboard!');
               }}
-              className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black transition cursor-pointer shadow-md"
+              className="px-3 py-1.5 rounded-lg bg-[#1e3a8a] hover:bg-[#1e40af] text-white text-xs font-bold transition cursor-pointer"
             >
               Copy FHIR JSON
             </button>
           </div>
 
-          <pre className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto max-h-[480px] shadow-inner">
+          <pre className="p-3 rounded-lg bg-slate-900 border border-slate-800 text-xs font-mono text-emerald-400 overflow-x-auto max-h-[400px]">
             {JSON.stringify(fhirDiagnosticReport, null, 2)}
           </pre>
         </div>
       )}
 
-      {/* Verification & Signature Confirmation Modal */}
+      {/* Sign Off Confirmation Modal */}
       {showSignModal && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="max-w-lg w-full rounded-[32px] bg-white/95 backdrop-blur-2xl border-2 border-emerald-500 p-6 sm:p-8 shadow-2xl text-slate-900">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-100 flex items-center justify-center text-emerald-600 mb-4 mx-auto shadow-xs">
-              <CheckCircle2 className="w-8 h-8" />
+        <div className="fixed inset-0 z-50 bg-slate-900/50 flex items-center justify-center p-4">
+          <div className="max-w-md w-full rounded-xl bg-white border border-slate-200 p-6 shadow-xl text-slate-900 space-y-4">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-emerald-700" />
+              <h3 className="text-base font-bold">Sign Off Clinical Encounter</h3>
             </div>
-
-            <h3 className="text-2xl font-black text-center text-blue-950 mb-2">Physician Verification & Sign-off</h3>
-            <p className="text-xs text-slate-600 text-center mb-6 leading-relaxed font-medium">
-              By signing, you confirm that you have personally reviewed, edited and verified the AI-generated clinical intake history for patient <strong>{patient.name}</strong>.
+            <p className="text-xs text-slate-600">
+              You are certifying that you have evaluated the AI intake summary for <strong>{patient.name}</strong> and confirmed the clinical directives. This generates an ABDM-compliant FHIR DiagnosticReport record.
             </p>
-
-            <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-xs space-y-2 mb-6">
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Physician Name:</span>
-                <span className="font-black text-slate-900">Dr. A. Varma, MD</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Registration Number:</span>
-                <span className="font-mono font-bold text-teal-700">MCI-48921</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">ABDM Health Facility:</span>
-                <span className="font-bold text-slate-900">AIIMS OPD-IN-DELHI-004</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500 font-semibold">Timestamp:</span>
-                <span className="font-mono text-slate-600 font-medium">{new Date().toLocaleString('en-IN')}</span>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
               <button
                 onClick={() => setShowSignModal(false)}
-                className="py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition cursor-pointer"
+                className="px-3.5 py-1.5 rounded-lg border border-slate-300 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
               >
                 Cancel
               </button>
               <button
-                id="btn-confirm-sign-note"
                 onClick={handleSignAndConfirm}
-                className="py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs tracking-wider uppercase shadow-lg shadow-emerald-600/30 transition cursor-pointer active:scale-95"
+                className="px-4 py-1.5 rounded-lg bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold cursor-pointer"
               >
-                Sign & Finalize
+                Confirm Signature
               </button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Success Notification Toast */}
-      {signSuccessToast && (
-        <div className="fixed bottom-6 right-6 z-50 bg-emerald-600 text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-3 animate-bounce">
-          <CheckCircle2 className="w-5 h-5" />
-          <span className="text-xs font-black">Clinical Note Successfully Verified & Signed!</span>
         </div>
       )}
     </div>

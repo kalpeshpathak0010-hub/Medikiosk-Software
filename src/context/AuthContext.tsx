@@ -9,8 +9,8 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { AppRoute, UserProfile, UserRole } from '../types';
-import { COLLECTIONS, seedInitialFirestoreData } from '../services/dbService';
+import { AppRoute, DoctorAvailabilityStatus, UserProfile, UserRole } from '../types';
+import { COLLECTIONS, seedInitialFirestoreData, updateDoctorStatusInDb } from '../services/dbService';
 import { logAuditEvent } from '../services/auditService';
 
 export const DEFAULT_PATIENT_PROFILE: UserProfile = {
@@ -42,6 +42,7 @@ interface AuthContextType {
     registrationNumber?: string,
     department?: string
   ) => Promise<{ success: boolean; message?: string }>;
+  updateDoctorAvailability: (status: DoctorAvailabilityStatus) => Promise<void>;
   logout: () => Promise<void>;
   canAccessRoute: (route: AppRoute) => boolean;
   setKioskLocked: (locked: boolean) => void;
@@ -77,6 +78,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               registrationNumber: data.registrationNumber || undefined,
               badgeNumber: data.badgeNumber || undefined,
               department: data.department || (data.role === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations'),
+              specialization: data.specialization || data.department || (data.role === 'DOCTOR' ? 'Physician & OPD' : undefined),
+              roomNumber: data.roomNumber || (data.role === 'DOCTOR' ? 'OPD Room 12' : undefined),
+              availabilityStatus: (data.availabilityStatus as DoctorAvailabilityStatus) || (data.role === 'DOCTOR' ? 'AVAILABLE' : undefined),
               organizationId: data.hospitalId || 'HOSP-DEL-001',
               hospitalName: data.hospitalName || 'AIIMS New Delhi (Central OPD Network)',
             };
@@ -244,13 +248,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // Write protected user profile to Firestore
       const userDocRef = doc(db, COLLECTIONS.USERS, user.uid);
+      const isDoctor = role === 'DOCTOR';
       await setDoc(userDocRef, {
         uid: user.uid,
         email: user.email,
         name: name.trim(),
         role,
-        registrationNumber: registrationNumber?.trim() || (role === 'DOCTOR' ? 'MCI-TEMP-01' : undefined),
-        department: department?.trim() || (role === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations'),
+        registrationNumber: registrationNumber?.trim() || (isDoctor ? 'MCI-TEMP-01' : undefined),
+        department: department?.trim() || (isDoctor ? 'General Medicine & OPD' : 'Hospital Operations'),
+        specialization: department?.trim() || (isDoctor ? 'Physician & OPD' : undefined),
+        roomNumber: isDoctor ? 'OPD Room 12' : undefined,
+        availabilityStatus: isDoctor ? 'AVAILABLE' : undefined,
         hospitalId: 'HOSP-DEL-001',
         hospitalName: 'AIIMS New Delhi (Central OPD Network)',
         createdAt: serverTimestamp(),
@@ -264,6 +272,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: user.email || email,
         registrationNumber: registrationNumber?.trim(),
         department: department?.trim(),
+        specialization: department?.trim() || (isDoctor ? 'Physician & OPD' : undefined),
+        roomNumber: isDoctor ? 'OPD Room 12' : undefined,
+        availabilityStatus: isDoctor ? 'AVAILABLE' : undefined,
         organizationId: 'HOSP-DEL-001',
         hospitalName: 'AIIMS New Delhi (Central OPD Network)',
       });
@@ -295,11 +306,44 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   /**
+   * Update real-time doctor availability status in Firestore
+   */
+  const updateDoctorAvailability = async (status: DoctorAvailabilityStatus) => {
+    if (!firebaseUser || currentUser.role !== 'DOCTOR') return;
+    try {
+      await updateDoctorStatusInDb(firebaseUser.uid, status);
+      setCurrentUser((prev) => ({
+        ...prev,
+        availabilityStatus: status,
+      }));
+      logAuditEvent({
+        action: 'DOCTOR_AVAILABILITY_CHANGED',
+        role: 'DOCTOR',
+        userId: firebaseUser.uid,
+        entityType: 'USER',
+        entityId: firebaseUser.uid,
+        metadata: { newStatus: status },
+      });
+    } catch (err) {
+      console.warn('Notice updating doctor availability:', err);
+    }
+  };
+
+  /**
    * Log out and restore anonymous Kiosk intake session
    */
   const logout = async () => {
     setIsAuthLoading(true);
     try {
+      // If doctor, mark offline before signing out
+      if (firebaseUser && currentUser.role === 'DOCTOR') {
+        try {
+          await updateDoctorStatusInDb(firebaseUser.uid, 'OFFLINE');
+        } catch (e) {
+          // non-blocking
+        }
+      }
+
       logAuditEvent({
         action: 'LOGOUT',
         role: currentUser.role,
@@ -329,6 +373,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isKioskLocked,
         loginStaffWithEmail,
         registerStaffAccount,
+        updateDoctorAvailability,
         logout,
         canAccessRoute,
         setKioskLocked: setIsKioskLocked,

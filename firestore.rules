@@ -31,9 +31,9 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Users Collection (profiles)
+    // Users Collection (profiles & doctor availability)
     match /users/{userId} {
-      allow read: if isSignedIn();
+      allow read: if true;
       allow create: if isSignedIn();
       allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
       allow delete: if isAdmin();
@@ -53,7 +53,28 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
-    // Clinical Histories
+    // Clinical Sessions (Multi-device OPD Queue)
+    match /clinicalSessions/{sessionId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Clinical History (Session-linked)
+    match /clinicalHistory/{sessionId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Red Flag Assessments (Session-linked)
+    match /redFlagAssessments/{sessionId} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isAdmin();
+    }
+
+    // Clinical Histories (legacy and extended)
     match /clinicalHistories/{historyId} {
       allow read: if isSignedIn();
       allow create, update: if isSignedIn();

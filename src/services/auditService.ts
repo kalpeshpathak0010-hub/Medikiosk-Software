@@ -18,11 +18,12 @@ export interface AuditEvent {
     | 'STAFF_LOGIN'
     | 'STAFF_REGISTERED'
     | 'LOGOUT'
-    | 'SYSTEM_INITIALIZED';
+    | 'SYSTEM_INITIALIZED'
+    | 'DOCTOR_AVAILABILITY_CHANGED';
   role: 'PATIENT' | 'DOCTOR' | 'ADMIN';
   userId: string;
   hospitalId?: string;
-  entityType: 'PATIENT' | 'ENCOUNTER' | 'DOCUMENT' | 'SUMMARY' | 'SYSTEM' | 'AUTH';
+  entityType: 'PATIENT' | 'ENCOUNTER' | 'DOCUMENT' | 'SUMMARY' | 'SYSTEM' | 'AUTH' | 'USER';
   entityId: string;
   metadata?: Record<string, any>;
 }

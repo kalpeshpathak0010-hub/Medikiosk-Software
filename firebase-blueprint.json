@@ -27,8 +27,11 @@
         "phone": { "type": "string" },
         "hospitalId": { "type": "string" },
         "department": { "type": "string" },
+        "specialization": { "type": "string" },
         "registrationNumber": { "type": "string" },
         "badgeNumber": { "type": "string" },
+        "roomNumber": { "type": "string" },
+        "availabilityStatus": { "type": "string", "enum": ["AVAILABLE", "BUSY", "OFFLINE"] },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
@@ -75,6 +78,69 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "patientId", "status", "tokenNumber"]
+    },
+    "clinicalSessions": {
+      "title": "Clinical Session (Multi-Device OPD Encounter)",
+      "description": "Real-time clinical session linking Patient Kiosk and Doctor Workspace",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "tokenNumber": { "type": "string" },
+        "department": { "type": "string" },
+        "chiefComplaint": { "type": "string" },
+        "status": { "type": "string", "enum": ["in_progress", "completed", "summary_ready", "under_review", "verified", "signed_off"] },
+        "redFlagStatus": { "type": "string", "enum": ["none", "attention", "urgent"] },
+        "hasRedFlag": { "type": "boolean" },
+        "summaryStatus": { "type": "string", "enum": ["none", "pending", "ready"] },
+        "language": { "type": "string" },
+        "patientName": { "type": "string" },
+        "patientAge": { "type": "number" },
+        "patientGender": { "type": "string" },
+        "patientPhone": { "type": "string" },
+        "startedAt": { "type": "string" },
+        "completedAt": { "type": "string" },
+        "underReviewAt": { "type": "string" },
+        "verifiedAt": { "type": "string" },
+        "signedOffAt": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["sessionId", "patientId", "status"]
+    },
+    "clinicalHistory": {
+      "title": "Session Clinical History",
+      "description": "Structured medical answers, timeline, and symptoms keyed by sessionId",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "chiefComplaint": { "type": "string" },
+        "HPI": { "type": "string" },
+        "clinicalAnswers": { "type": "array", "items": { "type": "object" } },
+        "pastMedicalHistory": { "type": "array", "items": { "type": "string" } },
+        "currentMedications": { "type": "array", "items": { "type": "object" } },
+        "allergies": { "type": "array", "items": { "type": "string" } },
+        "redFlags": { "type": "array", "items": { "type": "object" } },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["sessionId", "patientId"]
+    },
+    "redFlagAssessments": {
+      "title": "Red Flag Safety Assessment",
+      "description": "Safety warning indicators and triage status for kiosk patient encounter",
+      "type": "object",
+      "properties": {
+        "sessionId": { "type": "string" },
+        "patientId": { "type": "string" },
+        "tokenNumber": { "type": "string" },
+        "status": { "type": "string", "enum": ["none", "attention", "urgent"] },
+        "flags": { "type": "array", "items": { "type": "string" } },
+        "requiresStaffAttention": { "type": "boolean" },
+        "rationale": { "type": "string" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["sessionId", "status"]
     },
     "clinicalHistories": {
       "title": "Clinical History Record",

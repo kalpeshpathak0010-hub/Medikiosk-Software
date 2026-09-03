@@ -1,5 +1,21 @@
 export type UserRole = 'PATIENT' | 'DOCTOR' | 'ADMIN';
 
+export type DoctorAvailabilityStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
+
+export interface DoctorProfile {
+  id: string;
+  uid: string;
+  name: string;
+  department: string;
+  specialization?: string;
+  qualification?: string;
+  registrationNumber?: string;
+  roomNumber?: string;
+  status: DoctorAvailabilityStatus;
+  lastActive?: string;
+  updatedAt?: any;
+}
+
 export interface UserProfile {
   id: string;
   name: string;
@@ -9,6 +25,9 @@ export interface UserProfile {
   badgeNumber?: string;
   registrationNumber?: string;
   department?: string;
+  specialization?: string;
+  roomNumber?: string;
+  availabilityStatus?: DoctorAvailabilityStatus;
   organizationId: string;
   hospitalName: string;
   avatarUrl?: string;
