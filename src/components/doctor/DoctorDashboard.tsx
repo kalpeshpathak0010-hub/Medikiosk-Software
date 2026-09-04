@@ -36,7 +36,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
   onSelectPatient,
   selectedPatientId,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, updateDoctorAvailability } = useAuth();
   const [filterPriority, setFilterPriority] = useState<'all' | 'urgent' | 'normal'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [liveSessions, setLiveSessions] = useState<ClinicalSessionRecord[]>([]);
@@ -114,6 +114,46 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
               <p className="text-xs text-slate-600 font-medium">
                 {currentUser.name || 'Duty Medical Officer'} {currentUser.registrationNumber ? `(Reg: ${currentUser.registrationNumber})` : ''} • {currentUser.department || 'General Medicine'} • {currentUser.hospitalName || 'Central OPD'}
               </p>
+
+              {/* Real-time Doctor Availability Selector */}
+              <div className="flex items-center gap-2 mt-2.5">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Live Status:</span>
+                <div className="inline-flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200">
+                  <button
+                    onClick={() => updateDoctorAvailability('AVAILABLE')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      currentUser.availabilityStatus === 'AVAILABLE' || !currentUser.availabilityStatus
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                    <span>Available</span>
+                  </button>
+                  <button
+                    onClick={() => updateDoctorAvailability('BUSY')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      currentUser.availabilityStatus === 'BUSY'
+                        ? 'bg-amber-600 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-300" />
+                    <span>With Patient</span>
+                  </button>
+                  <button
+                    onClick={() => updateDoctorAvailability('OFFLINE')}
+                    className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      currentUser.availabilityStatus === 'OFFLINE'
+                        ? 'bg-slate-700 text-white shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                    <span>Offline</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -422,7 +462,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
         <div className="bg-white border border-slate-200 rounded-xl p-8 text-center text-xs text-slate-600">
           <Clock className="w-8 h-8 text-slate-400 mx-auto mb-2" />
           <p className="text-sm font-bold text-slate-800">
-            No patients currently waiting in the OPD queue.
+            No patients currently waiting.
           </p>
           <p className="text-slate-500 mt-1 max-w-md mx-auto">
             New patient intakes completed at the kiosk terminal will automatically appear here in real time.

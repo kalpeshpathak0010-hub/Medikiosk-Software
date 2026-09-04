@@ -63,8 +63,14 @@ type KioskStep =
   | 'review'
   | 'token';
 
-function getRouteFromHash(): AppRoute {
-  const hash = window.location.hash.replace(/^#\/?/, '');
+function getAppRouteFromLocation(): AppRoute {
+  // 1. Check pathname first (e.g. /doctor, /admin, /kiosk, /timeline, /ocr_pipeline, /abdm)
+  const path = window.location.pathname.replace(/^\/+/, '').split('/')[0].toLowerCase();
+  if (['kiosk', 'doctor', 'admin', 'timeline', 'ocr_pipeline', 'abdm'].includes(path)) {
+    return path as AppRoute;
+  }
+  // 2. Check hash fallback (e.g. #/doctor, #doctor, #/admin)
+  const hash = window.location.hash.replace(/^#\/?/, '').split('/')[0].toLowerCase();
   if (['kiosk', 'doctor', 'admin', 'timeline', 'ocr_pipeline', 'abdm'].includes(hash)) {
     return hash as AppRoute;
   }
@@ -74,9 +80,12 @@ function getRouteFromHash(): AppRoute {
 function MainAppRouter() {
   const { currentUser, currentRole, canAccessRoute, isAuthLoading } = useAuth();
 
-  // Active View & Route sync
-  const [currentView, setCurrentView] = useState<AppRoute>(getRouteFromHash());
-  const [unauthorizedTarget, setUnauthorizedTarget] = useState<AppRoute | null>(null);
+  // Active View & Route sync from URL pathname or hash
+  const [currentView, setCurrentView] = useState<AppRoute>(getAppRouteFromLocation());
+  const [unauthorizedTarget, setUnauthorizedTarget] = useState<AppRoute | null>(() => {
+    const initialRoute = getAppRouteFromLocation();
+    return initialRoute !== 'kiosk' ? initialRoute : null;
+  });
   const [isKioskFullscreen, setIsKioskFullscreen] = useState(false);
   const [isStaffLoginOpen, setIsStaffLoginOpen] = useState(false);
 
@@ -209,12 +218,16 @@ function MainAppRouter() {
   const [showIdleTimeoutModal, setShowIdleTimeoutModal] = useState(false);
   const lastActivityRef = useRef<number>(Date.now());
 
-  // URL Hash Sync and Protected Route Verification
+  // URL and Protected Route Synchronization
   const navigateTo = useCallback(
     (targetRoute: AppRoute) => {
+      const targetPath = `/${targetRoute}`;
+      if (window.location.pathname !== targetPath) {
+        window.history.pushState(null, '', targetPath);
+      }
       window.location.hash = `#/${targetRoute}`;
+      setCurrentView(targetRoute);
       if (canAccessRoute(targetRoute)) {
-        setCurrentView(targetRoute);
         setUnauthorizedTarget(null);
       } else {
         setUnauthorizedTarget(targetRoute);
@@ -223,25 +236,27 @@ function MainAppRouter() {
     [canAccessRoute]
   );
 
-  // Listen to hash change
+  // Listen to popstate and hashchange events
   useEffect(() => {
-    const handleHashChange = () => {
-      const route = getRouteFromHash();
+    const handleUrlChange = () => {
+      const route = getAppRouteFromLocation();
+      setCurrentView(route);
       if (canAccessRoute(route)) {
-        setCurrentView(route);
         setUnauthorizedTarget(null);
       } else {
         setUnauthorizedTarget(route);
       }
     };
 
-    window.addEventListener('hashchange', handleHashChange);
-    handleHashChange(); // initial check
+    window.addEventListener('popstate', handleUrlChange);
+    window.addEventListener('hashchange', handleUrlChange);
+    handleUrlChange(); // initial sync
 
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('popstate', handleUrlChange);
+      window.removeEventListener('hashchange', handleUrlChange);
     };
-  }, [canAccessRoute, currentRole]);
+  }, [canAccessRoute, currentRole, isAuthLoading]);
 
   // Cross-device session loader for Doctor Workspace
   useEffect(() => {
@@ -513,10 +528,9 @@ function MainAppRouter() {
     );
   }
 
-  const isAccessBlocked =
-    (unauthorizedTarget && !canAccessRoute(unauthorizedTarget)) ||
-    (currentView !== 'kiosk' && !canAccessRoute(currentView));
-  const blockedTarget = unauthorizedTarget || currentView;
+  const targetRoute = unauthorizedTarget || currentView;
+  const isAccessBlocked = targetRoute !== 'kiosk' && !canAccessRoute(targetRoute);
+  const blockedTarget = targetRoute;
 
   return (
     <div

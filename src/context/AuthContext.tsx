@@ -69,51 +69,92 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (userSnap.exists()) {
             const data = userSnap.data();
+            const verifiedRole = (data.role as UserRole) || (data.department?.toLowerCase().includes('admin') ? 'ADMIN' : 'DOCTOR');
             const verifiedProfile: UserProfile = {
               id: user.uid,
-              name: data.name || (data.role === 'DOCTOR' ? 'Dr. Staff Physician' : 'Hospital Administrator'),
-              role: (data.role as UserRole) || 'PATIENT',
+              name: data.name || (verifiedRole === 'DOCTOR' ? 'Dr. Staff Physician' : 'Hospital Administrator'),
+              role: verifiedRole,
               email: data.email || user.email || undefined,
               phone: data.phone || undefined,
               registrationNumber: data.registrationNumber || undefined,
               badgeNumber: data.badgeNumber || undefined,
-              department: data.department || (data.role === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations'),
-              specialization: data.specialization || data.department || (data.role === 'DOCTOR' ? 'Physician & OPD' : undefined),
-              roomNumber: data.roomNumber || (data.role === 'DOCTOR' ? 'OPD Room 12' : undefined),
-              availabilityStatus: (data.availabilityStatus as DoctorAvailabilityStatus) || (data.role === 'DOCTOR' ? 'AVAILABLE' : undefined),
+              department: data.department || (verifiedRole === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations'),
+              specialization: data.specialization || data.department || (verifiedRole === 'DOCTOR' ? 'Physician & OPD' : undefined),
+              roomNumber: data.roomNumber || (verifiedRole === 'DOCTOR' ? 'OPD Room 12' : undefined),
+              availabilityStatus: (data.availabilityStatus as DoctorAvailabilityStatus) || (verifiedRole === 'DOCTOR' ? 'AVAILABLE' : undefined),
               organizationId: data.hospitalId || 'HOSP-DEL-001',
               hospitalName: data.hospitalName || 'AIIMS New Delhi (Central OPD Network)',
             };
             setCurrentUser(verifiedProfile);
           } else {
-            // New anonymous patient or unprofiled user
-            const patientProfile: UserProfile = {
-              ...DEFAULT_PATIENT_PROFILE,
-              id: user.uid,
-            };
-            setCurrentUser(patientProfile);
+            if (user.isAnonymous) {
+              // Anonymous patient session for Kiosk Terminal intake
+              const patientProfile: UserProfile = {
+                ...DEFAULT_PATIENT_PROFILE,
+                id: user.uid,
+              };
+              setCurrentUser(patientProfile);
 
-            // Persist base patient profile
-            await setDoc(
-              userDocRef,
-              {
-                uid: user.uid,
-                role: 'PATIENT',
-                name: patientProfile.name,
-                hospitalId: patientProfile.organizationId,
-                hospitalName: patientProfile.hospitalName,
-                createdAt: serverTimestamp(),
-                updatedAt: serverTimestamp(),
-              },
-              { merge: true }
-            );
+              // Persist base patient profile
+              await setDoc(
+                userDocRef,
+                {
+                  uid: user.uid,
+                  role: 'PATIENT',
+                  name: patientProfile.name,
+                  hospitalId: patientProfile.organizationId,
+                  hospitalName: patientProfile.hospitalName,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            } else {
+              // Non-anonymous staff account without an existing Firestore profile
+              const email = user.email || '';
+              const isAdmin = email.toLowerCase().includes('admin');
+              const role: UserRole = isAdmin ? 'ADMIN' : 'DOCTOR';
+              const name = user.displayName || (role === 'DOCTOR' ? 'Dr. Staff Physician (MD)' : 'Hospital Administrator');
+              const staffProfile: UserProfile = {
+                id: user.uid,
+                name,
+                role,
+                email: user.email || undefined,
+                department: role === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations',
+                specialization: role === 'DOCTOR' ? 'Physician & OPD' : undefined,
+                roomNumber: role === 'DOCTOR' ? 'OPD Room 12' : undefined,
+                availabilityStatus: role === 'DOCTOR' ? 'AVAILABLE' : undefined,
+                organizationId: 'HOSP-DEL-001',
+                hospitalName: 'AIIMS New Delhi (Central OPD Network)',
+              };
+              setCurrentUser(staffProfile);
+
+              await setDoc(
+                userDocRef,
+                {
+                  uid: user.uid,
+                  email: user.email,
+                  name,
+                  role,
+                  department: staffProfile.department,
+                  hospitalId: 'HOSP-DEL-001',
+                  hospitalName: 'AIIMS New Delhi (Central OPD Network)',
+                  availabilityStatus: staffProfile.availabilityStatus,
+                  createdAt: serverTimestamp(),
+                  updatedAt: serverTimestamp(),
+                },
+                { merge: true }
+              );
+            }
           }
         } catch (e) {
           console.warn('[Firebase Auth] Notice loading user document:', e);
-          setCurrentUser({
-            ...DEFAULT_PATIENT_PROFILE,
-            id: user.uid,
-          });
+          if (user.isAnonymous) {
+            setCurrentUser({
+              ...DEFAULT_PATIENT_PROFILE,
+              id: user.uid,
+            });
+          }
         }
       } else {
         // Automatically sign in anonymously for Kiosk Terminal intake
@@ -359,7 +400,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setCurrentUser(DEFAULT_PATIENT_PROFILE);
       setIsAuthLoading(false);
-      window.location.hash = '#/kiosk';
+      try {
+        if (window.location.pathname !== '/kiosk') {
+          window.history.pushState(null, '', '/kiosk');
+        }
+        window.location.hash = '#/kiosk';
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      } catch (e) {
+        window.location.hash = '#/kiosk';
+      }
     }
   };
 

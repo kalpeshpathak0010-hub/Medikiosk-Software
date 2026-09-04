@@ -167,6 +167,16 @@ export const AdminDashboard: React.FC = () => {
 
       {activeAdminTab === 'telemetry' && (
         <div className="space-y-6">
+          {stats.totalPatients === 0 && stats.todayEncounters === 0 && (
+            <div className="p-4 rounded-xl bg-white border border-slate-200 text-slate-600 text-xs text-center shadow-xs">
+              <Clock className="w-6 h-6 text-slate-400 mx-auto mb-1.5" />
+              <p className="font-bold text-slate-800 text-sm">No data available yet.</p>
+              <p className="text-slate-500 mt-0.5">
+                Telemetry counters and OPD intake statistics will populate automatically as kiosk sessions and clinical encounters take place.
+              </p>
+            </div>
+          )}
+
           {/* Top Metric Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
             <div className="p-4 rounded-xl bg-white border border-slate-200 shadow-xs">
