@@ -21,10 +21,63 @@ export const DEFAULT_PATIENT_PROFILE: UserProfile = {
   hospitalName: 'AIIMS New Delhi (Central OPD Network)',
 };
 
-const ROLE_PERMISSIONS: Record<UserRole, AppRoute[]> = {
+export function normalizeUserRole(rawRole?: any, department?: string, email?: string): UserRole {
+  const roleStr = String(rawRole || '').trim().toUpperCase();
+  if (
+    roleStr === 'DOCTOR' ||
+    roleStr === 'PHYSICIAN' ||
+    roleStr === 'MEDICAL_STAFF' ||
+    roleStr === 'STAFF'
+  ) {
+    return 'DOCTOR';
+  }
+  if (
+    roleStr === 'ADMIN' ||
+    roleStr === 'ADMINISTRATOR' ||
+    roleStr === 'SUPER_ADMIN'
+  ) {
+    return 'ADMIN';
+  }
+  if (roleStr === 'PATIENT' || roleStr === 'USER' || roleStr === 'ANONYMOUS') {
+    return 'PATIENT';
+  }
+
+  // Check department or email hints if role is missing or ambiguous
+  if (department) {
+    const d = department.toLowerCase();
+    if (d.includes('admin') || d.includes('it') || d.includes('director')) {
+      return 'ADMIN';
+    }
+    if (d.includes('medicine') || d.includes('doctor') || d.includes('opd') || d.includes('cardio') || d.includes('physician')) {
+      return 'DOCTOR';
+    }
+  }
+
+  if (email) {
+    const e = email.toLowerCase();
+    if (e.includes('admin')) {
+      return 'ADMIN';
+    }
+    if (e.includes('doc') || e.includes('dr') || e.includes('physician')) {
+      return 'DOCTOR';
+    }
+  }
+
+  return 'DOCTOR';
+}
+
+const ROLE_PERMISSIONS: Record<string, AppRoute[]> = {
   PATIENT: ['kiosk'],
+  patient: ['kiosk'],
+  user: ['kiosk'],
   DOCTOR: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
+  doctor: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
+  physician: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
+  PHYSICIAN: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
+  medical_staff: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
+  staff: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
   ADMIN: ['admin', 'abdm', 'ocr_pipeline', 'doctor', 'timeline', 'kiosk'],
+  admin: ['admin', 'abdm', 'ocr_pipeline', 'doctor', 'timeline', 'kiosk'],
 };
 
 interface AuthContextType {
@@ -69,7 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
           if (userSnap.exists()) {
             const data = userSnap.data();
-            const verifiedRole = (data.role as UserRole) || (data.department?.toLowerCase().includes('admin') ? 'ADMIN' : 'DOCTOR');
+            const verifiedRole = normalizeUserRole(data.role, data.department, user.email || undefined);
             const verifiedProfile: UserProfile = {
               id: user.uid,
               name: data.name || (verifiedRole === 'DOCTOR' ? 'Dr. Staff Physician' : 'Hospital Administrator'),
@@ -112,8 +165,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             } else {
               // Non-anonymous staff account without an existing Firestore profile
               const email = user.email || '';
-              const isAdmin = email.toLowerCase().includes('admin');
-              const role: UserRole = isAdmin ? 'ADMIN' : 'DOCTOR';
+              const role: UserRole = normalizeUserRole(undefined, undefined, email);
               const name = user.displayName || (role === 'DOCTOR' ? 'Dr. Staff Physician (MD)' : 'Hospital Administrator');
               const staffProfile: UserProfile = {
                 id: user.uid,
@@ -177,7 +229,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const canAccessRoute = (route: AppRoute): boolean => {
-    const allowed = ROLE_PERMISSIONS[currentUser.role] || ['kiosk'];
+    const roleKey = currentUser.role ? String(currentUser.role).toUpperCase().trim() : 'PATIENT';
+    const allowed = ROLE_PERMISSIONS[roleKey] || ROLE_PERMISSIONS[currentUser.role] || ['kiosk'];
     return allowed.includes(route);
   };
 
@@ -204,14 +257,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (userSnap.exists()) {
         const d = userSnap.data();
-        role = (d.role as UserRole) || 'DOCTOR';
+        role = normalizeUserRole(d.role, d.department, user.email || email);
         name = d.name || name;
         dept = d.department || dept;
         regNo = d.registrationNumber;
       } else {
-        // First login: create doctor profile based on email
-        const isDoc = email.toLowerCase().includes('doc') || email.toLowerCase().includes('dr');
-        role = isDoc ? 'DOCTOR' : 'ADMIN';
+        // First login: create doctor profile based on email or credentials
+        role = normalizeUserRole(undefined, dept, email);
+        const isDoc = role === 'DOCTOR';
         name = isDoc ? 'Dr. Physician (MD)' : 'OPD Administrator';
         await setDoc(userDocRef, {
           uid: user.uid,
@@ -350,7 +403,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
    * Update real-time doctor availability status in Firestore
    */
   const updateDoctorAvailability = async (status: DoctorAvailabilityStatus) => {
-    if (!firebaseUser || currentUser.role !== 'DOCTOR') return;
+    const roleKey = currentUser.role ? String(currentUser.role).toUpperCase().trim() : '';
+    if (!firebaseUser || (roleKey !== 'DOCTOR' && roleKey !== 'PHYSICIAN')) return;
     try {
       await updateDoctorStatusInDb(firebaseUser.uid, status);
       setCurrentUser((prev) => ({

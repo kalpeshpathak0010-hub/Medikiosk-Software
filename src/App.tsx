@@ -82,10 +82,6 @@ function MainAppRouter() {
 
   // Active View & Route sync from URL pathname or hash
   const [currentView, setCurrentView] = useState<AppRoute>(getAppRouteFromLocation());
-  const [unauthorizedTarget, setUnauthorizedTarget] = useState<AppRoute | null>(() => {
-    const initialRoute = getAppRouteFromLocation();
-    return initialRoute !== 'kiosk' ? initialRoute : null;
-  });
   const [isKioskFullscreen, setIsKioskFullscreen] = useState(false);
   const [isStaffLoginOpen, setIsStaffLoginOpen] = useState(false);
 
@@ -227,13 +223,8 @@ function MainAppRouter() {
       }
       window.location.hash = `#/${targetRoute}`;
       setCurrentView(targetRoute);
-      if (canAccessRoute(targetRoute)) {
-        setUnauthorizedTarget(null);
-      } else {
-        setUnauthorizedTarget(targetRoute);
-      }
     },
-    [canAccessRoute]
+    []
   );
 
   // Listen to popstate and hashchange events
@@ -241,11 +232,6 @@ function MainAppRouter() {
     const handleUrlChange = () => {
       const route = getAppRouteFromLocation();
       setCurrentView(route);
-      if (canAccessRoute(route)) {
-        setUnauthorizedTarget(null);
-      } else {
-        setUnauthorizedTarget(route);
-      }
     };
 
     window.addEventListener('popstate', handleUrlChange);
@@ -256,7 +242,7 @@ function MainAppRouter() {
       window.removeEventListener('popstate', handleUrlChange);
       window.removeEventListener('hashchange', handleUrlChange);
     };
-  }, [canAccessRoute, currentRole, isAuthLoading]);
+  }, []);
 
   // Cross-device session loader for Doctor Workspace
   useEffect(() => {
@@ -528,9 +514,8 @@ function MainAppRouter() {
     );
   }
 
-  const targetRoute = unauthorizedTarget || currentView;
-  const isAccessBlocked = targetRoute !== 'kiosk' && !canAccessRoute(targetRoute);
-  const blockedTarget = targetRoute;
+  const isAccessBlocked = currentView !== 'kiosk' && !canAccessRoute(currentView);
+  const blockedTarget = currentView;
 
   return (
     <div

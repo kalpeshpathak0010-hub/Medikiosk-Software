@@ -431,7 +431,7 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
 
                   {/* Right: Quick Extracted Data & Action */}
                   <div className="flex flex-wrap items-center justify-between lg:justify-end gap-3 pt-2 lg:pt-0 border-t lg:border-t-0 border-slate-100">
-                    {summary && summary.sourceDocumentIds.length > 0 && (
+                    {summary?.sourceDocumentIds && summary.sourceDocumentIds.length > 0 && (
                       <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-slate-100 border border-slate-200 text-xs text-slate-700 font-medium">
                         <FileText className="w-3.5 h-3.5 text-blue-700" />
                         <span>{summary.sourceDocumentIds.length} OCR Records</span>

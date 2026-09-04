@@ -158,7 +158,9 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
     badge?: number;
   }> = [];
 
-  if (currentRole === 'DOCTOR' || currentRole === 'ADMIN') {
+  const normalizedRole = String(currentRole || '').toUpperCase().trim();
+
+  if (normalizedRole === 'DOCTOR' || normalizedRole === 'ADMIN' || normalizedRole === 'PHYSICIAN') {
     staffNavItems.push({
       id: 'doctor',
       label: 'OPD Queue',
@@ -177,7 +179,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
     });
   }
 
-  if (currentRole === 'ADMIN') {
+  if (normalizedRole === 'ADMIN') {
     staffNavItems.push({
       id: 'admin',
       label: 'Telemetry & Admin',
@@ -454,7 +456,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
             {/* Right: Doctor Availability Toggle & Staff Profile */}
             <div className="flex items-center gap-3 shrink-0">
               {/* Doctor Real-Time Availability Switcher */}
-              {currentRole === 'DOCTOR' && (
+              {(normalizedRole === 'DOCTOR' || normalizedRole === 'PHYSICIAN') && (
                 <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700 text-xs font-bold">
                   <span className="text-[11px] text-slate-400 px-1 hidden xl:inline">Status:</span>
                   <button

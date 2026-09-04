@@ -40,8 +40,9 @@ export const UnauthorizedAccessView: React.FC<UnauthorizedAccessViewProps> = ({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
+  const userRoleNormalized = String(currentUser.role || '').toUpperCase().trim();
   const isStaffAuthenticated = Boolean(
-    firebaseUser && !firebaseUser.isAnonymous && (currentUser.role === 'DOCTOR' || currentUser.role === 'ADMIN')
+    firebaseUser && !firebaseUser.isAnonymous && (userRoleNormalized === 'DOCTOR' || userRoleNormalized === 'ADMIN' || userRoleNormalized === 'PHYSICIAN')
   );
 
   const getRouteDetails = (route: AppRoute) => {
