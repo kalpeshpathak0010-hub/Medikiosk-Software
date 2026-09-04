@@ -76,8 +76,8 @@ const ROLE_PERMISSIONS: Record<string, AppRoute[]> = {
   PHYSICIAN: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
   medical_staff: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
   staff: ['doctor', 'timeline', 'ocr_pipeline', 'kiosk'],
-  ADMIN: ['admin', 'abdm', 'ocr_pipeline', 'doctor', 'timeline', 'kiosk'],
-  admin: ['admin', 'abdm', 'ocr_pipeline', 'doctor', 'timeline', 'kiosk'],
+  ADMIN: ['admin', 'abdm', 'ocr_pipeline', 'kiosk'],
+  admin: ['admin', 'abdm', 'ocr_pipeline', 'kiosk'],
 };
 
 interface AuthContextType {
@@ -229,6 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const canAccessRoute = (route: AppRoute): boolean => {
+    if (isAuthLoading) return true;
     const roleKey = currentUser.role ? String(currentUser.role).toUpperCase().trim() : 'PATIENT';
     const allowed = ROLE_PERMISSIONS[roleKey] || ROLE_PERMISSIONS[currentUser.role] || ['kiosk'];
     return allowed.includes(route);
@@ -245,6 +246,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), pass);
       const user = userCredential.user;
+      setFirebaseUser(user);
 
       // Verify role from protected Firestore users collection
       const userDocRef = doc(db, COLLECTIONS.USERS, user.uid);
@@ -339,6 +341,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), pass);
       const user = userCredential.user;
+      setFirebaseUser(user);
 
       // Write protected user profile to Firestore
       const userDocRef = doc(db, COLLECTIONS.USERS, user.uid);

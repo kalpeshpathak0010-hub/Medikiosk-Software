@@ -50,7 +50,7 @@ export const UnauthorizedAccessView: React.FC<UnauthorizedAccessViewProps> = ({
       case 'doctor':
         return {
           title: 'Physician OPD Clinical Workspace',
-          requiredRole: 'DOCTOR or ADMIN',
+          requiredRole: 'DOCTOR',
           description:
             'Contains confidential patient triage queue, live clinical history intake streams, and physician verification notes.',
           icon: Stethoscope,
@@ -59,7 +59,7 @@ export const UnauthorizedAccessView: React.FC<UnauthorizedAccessViewProps> = ({
       case 'timeline':
         return {
           title: 'Longitudinal Medical Timeline',
-          requiredRole: 'DOCTOR or ADMIN',
+          requiredRole: 'DOCTOR',
           description:
             'Displays multi-year chronological medical history and confidential diagnostic event logs.',
           icon: Stethoscope,
@@ -122,9 +122,7 @@ export const UnauthorizedAccessView: React.FC<UnauthorizedAccessViewProps> = ({
         const res = await loginStaffWithEmail(email, password);
         if (res.success) {
           setSuccessMessage('Staff authentication verified! Loading protected workspace...');
-          setTimeout(() => {
-            onNavigate(attemptedRoute);
-          }, 400);
+          onNavigate(attemptedRoute);
         } else {
           setErrorMessage(res.message || 'Authentication failed. Please check your credentials.');
         }
@@ -145,9 +143,7 @@ export const UnauthorizedAccessView: React.FC<UnauthorizedAccessViewProps> = ({
         );
         if (res.success) {
           setSuccessMessage('Staff profile registered! Loading protected workspace...');
-          setTimeout(() => {
-            onNavigate(attemptedRoute);
-          }, 400);
+          onNavigate(attemptedRoute);
         } else {
           setErrorMessage(res.message || 'Registration failed. Please try again.');
         }
