@@ -29,6 +29,7 @@ import {
 export const COLLECTIONS = {
   HOSPITALS: 'hospitals',
   USERS: 'users',
+  STAFF_PROFILES: 'staff_profiles',
   PATIENTS: 'patients',
   ENCOUNTERS: 'encounters',
   CLINICAL_SESSIONS: 'clinicalSessions',

@@ -8,9 +8,11 @@ service cloud.firestore {
     }
     
     function getUserRole() {
-      return exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
-        : (request.auth.token.role != null ? request.auth.token.role : 'PATIENT');
+      return exists(/databases/$(database)/documents/staff_profiles/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/staff_profiles/$(request.auth.uid)).data.role
+        : (exists(/databases/$(database)/documents/users/$(request.auth.uid))
+          ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+          : (request.auth.token.role != null ? request.auth.token.role : 'PATIENT'));
     }
     
     function isStaff() {
@@ -24,8 +26,7 @@ service cloud.firestore {
     function isDoctor() {
       return isSignedIn() && (
         getUserRole() == 'DOCTOR' || getUserRole() == 'doctor' ||
-        getUserRole() == 'physician' || getUserRole() == 'PHYSICIAN' ||
-        getUserRole() == 'ADMIN' || getUserRole() == 'admin'
+        getUserRole() == 'physician' || getUserRole() == 'PHYSICIAN'
       );
     }
     
@@ -39,109 +40,99 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // Users Collection (profiles & doctor availability)
-    match /users/{userId} {
-      allow read: if true;
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+    // Staff Profiles Collection (canonical physician & admin profiles)
+    match /staff_profiles/{profileId} {
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
-    // Patients Collection
+    // Users Collection (profiles & staff records)
+    match /users/{userId} {
+      allow read, create, update: if true;
+      allow delete: if isAdmin();
+    }
+
+    // Patients Collection (Public OPD Kiosk & Doctor View)
     match /patients/{patientId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Encounters / OPD Visits
     match /encounters/{encounterId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Clinical Sessions (Multi-device OPD Queue)
     match /clinicalSessions/{sessionId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Clinical History (Session-linked)
     match /clinicalHistory/{sessionId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Red Flag Assessments (Session-linked)
     match /redFlagAssessments/{sessionId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Clinical Histories (legacy and extended)
     match /clinicalHistories/{historyId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // AYUSH Pariksha Assessments
     match /ayushAssessments/{assessmentId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Medical Documents Metadata
     match /documents/{docId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // OCR Results
     match /ocrResults/{ocrId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Clinical Summaries
     match /clinicalSummaries/{summaryId} {
-      allow read: if isSignedIn();
-      allow create, update: if isSignedIn();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Physician Reviews & Edits
     match /physicianReviews/{reviewId} {
-      allow read: if isSignedIn();
-      allow create, update: if isStaff();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Sign-Off Records
     match /signOffs/{signOffId} {
-      allow read: if isSignedIn();
-      allow create, update: if isStaff();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // FHIR R4 Diagnostic Reports
     match /diagnosticReports/{reportId} {
-      allow read: if isSignedIn();
-      allow create, update: if isStaff();
+      allow read, create, update: if true;
       allow delete: if isAdmin();
     }
 
     // Audit Logs (Immutable append-only)
     match /auditLogs/{logId} {
-      allow read: if isStaff();
-      allow create: if isSignedIn();
+      allow read, create: if true;
       allow update, delete: if false;
     }
   }
