@@ -702,7 +702,7 @@ export function generateClinicalSummaryFromAnswers(
     id: `SUM-${Date.now()}`,
     patientId: patient.id,
     visitId: `VISIT-${Date.now()}`,
-    tokenNumber: `A-${Math.floor(100 + Math.random() * 900)}`,
+    tokenNumber: `A-${((Date.now() % 900) + 100).toString()}`,
     timestamp: new Date().toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }),
     isDraft: true,
     status: 'DRAFT_PENDING_REVIEW',

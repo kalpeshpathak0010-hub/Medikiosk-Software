@@ -158,20 +158,24 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
     badge?: number;
   }> = [];
 
-  const normalizedRole = String(currentRole || '').toUpperCase().trim();
-
-  if (normalizedRole === 'DOCTOR' || normalizedRole === 'ADMIN' || normalizedRole === 'PHYSICIAN') {
+  if (canAccessRoute('doctor')) {
     staffNavItems.push({
       id: 'doctor',
       label: 'OPD Queue',
       icon: Stethoscope,
       badge: redFlagsCount,
     });
+  }
+
+  if (canAccessRoute('timeline')) {
     staffNavItems.push({
       id: 'timeline',
       label: 'Medical Timeline',
       icon: Clock,
     });
+  }
+
+  if (canAccessRoute('ocr_pipeline')) {
     staffNavItems.push({
       id: 'ocr_pipeline',
       label: 'OCR Documents',
@@ -179,12 +183,15 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
     });
   }
 
-  if (normalizedRole === 'ADMIN') {
+  if (canAccessRoute('admin')) {
     staffNavItems.push({
       id: 'admin',
       label: 'Telemetry & Admin',
       icon: BarChart3,
     });
+  }
+
+  if (canAccessRoute('abdm')) {
     staffNavItems.push({
       id: 'abdm',
       label: 'ABDM FHIR',
@@ -456,7 +463,7 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
             {/* Right: Doctor Availability Toggle & Staff Profile */}
             <div className="flex items-center gap-3 shrink-0">
               {/* Doctor Real-Time Availability Switcher */}
-              {(normalizedRole === 'DOCTOR' || normalizedRole === 'PHYSICIAN') && (
+              {canAccessRoute('doctor') && (
                 <div className="flex items-center gap-1 bg-slate-800 rounded-lg p-1 border border-slate-700 text-xs font-bold">
                   <span className="text-[11px] text-slate-400 px-1 hidden xl:inline">Status:</span>
                   <button
@@ -473,9 +480,9 @@ export const RoleSwitcher: React.FC<RoleSwitcherProps> = ({
                   </button>
                   <button
                     id="btn-status-busy"
-                    onClick={() => updateDoctorAvailability('BUSY')}
+                    onClick={() => updateDoctorAvailability('WITH_PATIENT')}
                     className={`px-2 py-1 rounded-md text-[11px] transition cursor-pointer flex items-center gap-1 ${
-                      currentUser.availabilityStatus === 'BUSY'
+                      currentUser.availabilityStatus === 'WITH_PATIENT' || currentUser.availabilityStatus === 'BUSY'
                         ? 'bg-amber-600 text-white font-extrabold shadow-xs'
                         : 'text-slate-400 hover:text-slate-200'
                     }`}

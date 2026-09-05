@@ -131,9 +131,9 @@ export const DoctorDashboard: React.FC<DoctorDashboardProps> = ({
                     <span>Available</span>
                   </button>
                   <button
-                    onClick={() => updateDoctorAvailability('BUSY')}
+                    onClick={() => updateDoctorAvailability('WITH_PATIENT')}
                     className={`px-2.5 py-1 rounded-md text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer ${
-                      currentUser.availabilityStatus === 'BUSY'
+                      currentUser.availabilityStatus === 'WITH_PATIENT' || currentUser.availabilityStatus === 'BUSY'
                         ? 'bg-amber-600 text-white shadow-xs'
                         : 'text-slate-600 hover:text-slate-900'
                     }`}

@@ -163,40 +163,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 { merge: true }
               );
             } else {
-              // Non-anonymous staff account without an existing Firestore profile
-              const email = user.email || '';
-              const role: UserRole = normalizeUserRole(undefined, undefined, email);
-              const name = user.displayName || (role === 'DOCTOR' ? 'Dr. Staff Physician (MD)' : 'Hospital Administrator');
-              const staffProfile: UserProfile = {
+              // Non-anonymous staff account without an existing Firestore profile:
+              // Do NOT grant staff access or auto-create doctor profile
+              setCurrentUser({
+                ...DEFAULT_PATIENT_PROFILE,
                 id: user.uid,
-                name,
-                role,
+                name: user.displayName || 'Unverified User',
                 email: user.email || undefined,
-                department: role === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations',
-                specialization: role === 'DOCTOR' ? 'Physician & OPD' : undefined,
-                roomNumber: role === 'DOCTOR' ? 'OPD Room 12' : undefined,
-                availabilityStatus: role === 'DOCTOR' ? 'AVAILABLE' : undefined,
-                organizationId: 'HOSP-DEL-001',
-                hospitalName: 'AIIMS New Delhi (Central OPD Network)',
-              };
-              setCurrentUser(staffProfile);
-
-              await setDoc(
-                userDocRef,
-                {
-                  uid: user.uid,
-                  email: user.email,
-                  name,
-                  role,
-                  department: staffProfile.department,
-                  hospitalId: 'HOSP-DEL-001',
-                  hospitalName: 'AIIMS New Delhi (Central OPD Network)',
-                  availabilityStatus: staffProfile.availabilityStatus,
-                  createdAt: serverTimestamp(),
-                  updatedAt: serverTimestamp(),
-                },
-                { merge: true }
-              );
+                role: 'PATIENT',
+              });
             }
           }
         } catch (e) {
@@ -242,55 +217,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     email: string,
     pass: string
   ): Promise<{ success: boolean; message?: string }> => {
-    setIsAuthLoading(true);
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email.trim(), pass);
       const user = userCredential.user;
-      setFirebaseUser(user);
 
       // Verify role from protected Firestore users collection
       const userDocRef = doc(db, COLLECTIONS.USERS, user.uid);
       const userSnap = await getDoc(userDocRef);
 
-      let role: UserRole = 'DOCTOR';
-      let name = email.split('@')[0];
-      let dept = 'General Medicine';
-      let regNo: string | undefined;
-
-      if (userSnap.exists()) {
-        const d = userSnap.data();
-        role = normalizeUserRole(d.role, d.department, user.email || email);
-        name = d.name || name;
-        dept = d.department || dept;
-        regNo = d.registrationNumber;
-      } else {
-        // First login: create doctor profile based on email or credentials
-        role = normalizeUserRole(undefined, dept, email);
-        const isDoc = role === 'DOCTOR';
-        name = isDoc ? 'Dr. Physician (MD)' : 'OPD Administrator';
-        await setDoc(userDocRef, {
-          uid: user.uid,
-          email: user.email,
-          name,
-          role,
-          hospitalId: 'HOSP-DEL-001',
-          hospitalName: 'AIIMS New Delhi (Central OPD Network)',
-          department: dept,
-          createdAt: serverTimestamp(),
-          updatedAt: serverTimestamp(),
-        });
+      if (!userSnap.exists()) {
+        await signOut(auth);
+        setFirebaseUser(null);
+        setCurrentUser(DEFAULT_PATIENT_PROFILE);
+        return {
+          success: false,
+          message:
+            'Authentication successful, but no verified physician/staff profile was found for this account in Firestore. Please register your official staff profile.',
+        };
       }
 
-      setCurrentUser({
+      const d = userSnap.data();
+      const role = normalizeUserRole(d.role, d.department, user.email || email);
+      const verifiedProfile: UserProfile = {
         id: user.uid,
-        name,
+        name: d.name || (role === 'DOCTOR' ? 'Dr. Staff Physician' : 'Hospital Administrator'),
         role,
-        email: user.email || email,
-        department: dept,
-        registrationNumber: regNo,
-        organizationId: 'HOSP-DEL-001',
-        hospitalName: 'AIIMS New Delhi (Central OPD Network)',
-      });
+        email: d.email || user.email || email,
+        phone: d.phone,
+        registrationNumber: d.registrationNumber,
+        badgeNumber: d.badgeNumber,
+        department: d.department || (role === 'DOCTOR' ? 'General Medicine & OPD' : 'Hospital Operations'),
+        specialization: d.specialization || d.department || (role === 'DOCTOR' ? 'Physician & OPD' : undefined),
+        roomNumber: d.roomNumber || (role === 'DOCTOR' ? 'OPD Room 12' : undefined),
+        availabilityStatus: (d.availabilityStatus as DoctorAvailabilityStatus) || (role === 'DOCTOR' ? 'AVAILABLE' : undefined),
+        organizationId: d.hospitalId || 'HOSP-DEL-001',
+        hospitalName: d.hospitalName || 'AIIMS New Delhi (Central OPD Network)',
+      };
+
+      setFirebaseUser(user);
+      setCurrentUser(verifiedProfile);
 
       logAuditEvent({
         action: 'STAFF_LOGIN',
@@ -301,10 +266,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         metadata: { role, email: user.email },
       });
 
-      setIsAuthLoading(false);
       return { success: true };
     } catch (error: any) {
-      setIsAuthLoading(false);
       const code = error.code;
       let msg = 'Authentication failed. Please verify your credentials.';
       if (code === 'auth/invalid-credential' || code === 'auth/wrong-password' || code === 'auth/user-not-found') {
@@ -337,7 +300,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     registrationNumber?: string,
     department?: string
   ): Promise<{ success: boolean; message?: string }> => {
-    setIsAuthLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), pass);
       const user = userCredential.user;
@@ -346,7 +308,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Write protected user profile to Firestore
       const userDocRef = doc(db, COLLECTIONS.USERS, user.uid);
       const isDoctor = role === 'DOCTOR';
-      await setDoc(userDocRef, {
+      const profileData = {
         uid: user.uid,
         email: user.email,
         name: name.trim(),
@@ -355,26 +317,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         department: department?.trim() || (isDoctor ? 'General Medicine & OPD' : 'Hospital Operations'),
         specialization: department?.trim() || (isDoctor ? 'Physician & OPD' : undefined),
         roomNumber: isDoctor ? 'OPD Room 12' : undefined,
-        availabilityStatus: isDoctor ? 'AVAILABLE' : undefined,
+        availabilityStatus: isDoctor ? ('AVAILABLE' as DoctorAvailabilityStatus) : undefined,
+        status: isDoctor ? ('AVAILABLE' as DoctorAvailabilityStatus) : undefined,
         hospitalId: 'HOSP-DEL-001',
         hospitalName: 'AIIMS New Delhi (Central OPD Network)',
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
-      });
+      };
+      await setDoc(userDocRef, profileData);
 
-      setCurrentUser({
+      const verifiedProfile: UserProfile = {
         id: user.uid,
-        name: name.trim(),
+        name: profileData.name,
         role,
         email: user.email || email,
-        registrationNumber: registrationNumber?.trim(),
-        department: department?.trim(),
-        specialization: department?.trim() || (isDoctor ? 'Physician & OPD' : undefined),
-        roomNumber: isDoctor ? 'OPD Room 12' : undefined,
-        availabilityStatus: isDoctor ? 'AVAILABLE' : undefined,
-        organizationId: 'HOSP-DEL-001',
-        hospitalName: 'AIIMS New Delhi (Central OPD Network)',
-      });
+        registrationNumber: profileData.registrationNumber,
+        department: profileData.department,
+        specialization: profileData.specialization,
+        roomNumber: profileData.roomNumber,
+        availabilityStatus: profileData.availabilityStatus,
+        organizationId: profileData.hospitalId,
+        hospitalName: profileData.hospitalName,
+      };
+
+      setCurrentUser(verifiedProfile);
 
       logAuditEvent({
         action: 'STAFF_REGISTERED',
@@ -382,13 +348,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         userId: user.uid,
         entityType: 'AUTH',
         entityId: user.uid,
-        metadata: { role, name, email },
+        metadata: { role, name: profileData.name, email },
       });
 
-      setIsAuthLoading(false);
       return { success: true };
     } catch (error: any) {
-      setIsAuthLoading(false);
       const code = error.code;
       let msg = 'Registration failed. Please try again.';
       if (code === 'auth/email-already-in-use') {

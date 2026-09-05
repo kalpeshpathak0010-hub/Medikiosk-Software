@@ -38,7 +38,6 @@ import {
   RedFlagAlert,
 } from './types';
 import { generateClinicalSummaryFromAnswers } from './services/clinicalEngine';
-import { storageService } from './services/storageService';
 import {
   savePatientRecord,
   createPatientEncounter,
@@ -91,24 +90,39 @@ function MainAppRouter() {
   const [textSize, setTextSize] = useState<'normal' | 'large' | 'extraLarge'>('normal');
   const [highContrast, setHighContrast] = useState(false);
 
-  // Global State (for Doctor & Admin views) with persistent storage
-  const [patients, setPatients] = useState<Patient[]>(() => storageService.getPatients());
-  const [summaries, setSummaries] = useState<Record<string, ClinicalSummary>>(() => storageService.getSummaries());
-  const [redFlags, setRedFlags] = useState<RedFlagAlert[]>(() => storageService.getRedFlags());
-  const [patientTimelineEvents, setPatientTimelineEvents] = useState<MedicalTimelineEvent[]>(() =>
-    storageService.getTimelineEvents()
-  );
+  // Global State (for Doctor & Admin views) with Firestore as single source of truth
+  const [patients, setPatients] = useState<Patient[]>([]);
+  const [summaries, setSummaries] = useState<Record<string, ClinicalSummary>>({});
+  const [redFlags, setRedFlags] = useState<RedFlagAlert[]>([]);
+  const [patientTimelineEvents, setPatientTimelineEvents] = useState<MedicalTimelineEvent[]>([]);
 
   // Firestore Real-Time Subscriptions
   useEffect(() => {
     const unsubPatients = subscribeToPatients((livePatients) => {
       setPatients(livePatients);
-      storageService.savePatients(livePatients);
     });
 
     const unsubSummaries = subscribeToSummaries((liveSummaries) => {
       setSummaries(liveSummaries);
-      storageService.saveSummaries(liveSummaries);
+
+      // Dynamically extract red flags from live summaries
+      const collected: RedFlagAlert[] = [];
+      Object.values(liveSummaries).forEach((sum) => {
+        if (sum.redFlags && sum.redFlags.length > 0) {
+          collected.push({
+            id: `RF-${sum.patientId}`,
+            patientId: sum.patientId,
+            tokenNumber: sum.tokenNumber || 'A-100',
+            symptoms: sum.redFlags,
+            description: `Triage Red Flag: ${sum.redFlags.join(', ')}`,
+            timestamp: sum.timestamp || new Date().toISOString(),
+            priority: 'HIGH',
+            department: sum.patientInfo?.department || 'General Medicine',
+            isAcknowledged: false,
+          });
+        }
+      });
+      setRedFlags(collected);
     });
 
     return () => {
@@ -118,18 +132,13 @@ function MainAppRouter() {
   }, []);
 
   // Active Patient Session
-  const [currentPatient, setCurrentPatient] = useState<Patient>(() => {
-    const list = storageService.getPatients();
-    return list.length > 0
-      ? list[0]
-      : {
-          id: 'pat-walkin',
-          name: 'Walk-in Patient',
-          age: 35,
-          gender: 'Other',
-          phone: '',
-          isExistingPatient: false,
-        };
+  const [currentPatient, setCurrentPatient] = useState<Patient>({
+    id: 'pat-walkin',
+    name: 'Walk-in Patient',
+    age: 35,
+    gender: 'Other',
+    phone: '',
+    isExistingPatient: false,
   });
   const [selectedIntakeMode, setSelectedIntakeMode] = useState<IntakeMode>('modern');
   const [intakeAnswers, setIntakeAnswers] = useState<QuestionAnswer[]>([]);
@@ -139,69 +148,45 @@ function MainAppRouter() {
   const [ayushData, setAyushData] = useState<AyushHistory | undefined>(undefined);
 
   // Generated Summary for active session
-  const [generatedSummary, setGeneratedSummary] = useState<ClinicalSummary>(() => {
-    const storedSummaries = storageService.getSummaries();
-    const firstKey = Object.keys(storedSummaries)[0];
-    if (firstKey && storedSummaries[firstKey]) {
-      return storedSummaries[firstKey];
-    }
-    return {
-      id: `SUM-${Date.now()}`,
-      patientId: 'pat-walkin',
-      visitId: `VIS-${Date.now()}`,
-      tokenNumber: 'A-101',
-      timestamp: new Date().toISOString(),
-      isDraft: true,
-      status: 'DRAFT_PENDING_REVIEW',
-      intakeMode: 'modern',
-      patientInfo: {
-        name: 'Walk-in Patient',
-        age: 35,
-        gender: 'Other',
-        phone: '',
-        department: 'General Medicine',
-      },
-      chiefComplaint: '',
-      historyOfPresentIllness: '',
-      pastMedicalHistory: [],
-      pastSurgicalHistory: [],
-      currentMedications: [],
-      drugAllergies: [],
-      familyHistory: [],
-      personalHistory: {
-        diet: 'Mixed',
-        smoking: 'No',
-        alcohol: 'No',
-        sleep: 'Normal',
-        bowelBladder: 'Normal',
-      },
-      reviewOfSystems: [],
-      previousInvestigations: [],
-      documentSummary: '',
-      redFlags: [],
-      importantNotes: '',
-      isPhysicianVerified: false,
-      sourceDocumentIds: [],
-      intakeTimestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-    };
+  const [generatedSummary, setGeneratedSummary] = useState<ClinicalSummary>({
+    id: `SUM-${Date.now()}`,
+    patientId: 'pat-walkin',
+    visitId: `VIS-${Date.now()}`,
+    tokenNumber: 'A-101',
+    timestamp: new Date().toISOString(),
+    isDraft: true,
+    status: 'DRAFT_PENDING_REVIEW',
+    intakeMode: 'modern',
+    patientInfo: {
+      name: 'Walk-in Patient',
+      age: 35,
+      gender: 'Other',
+      phone: '',
+      department: 'General Medicine',
+    },
+    chiefComplaint: '',
+    historyOfPresentIllness: '',
+    pastMedicalHistory: [],
+    pastSurgicalHistory: [],
+    currentMedications: [],
+    drugAllergies: [],
+    familyHistory: [],
+    personalHistory: {
+      diet: 'Mixed',
+      smoking: 'No',
+      alcohol: 'No',
+      sleep: 'Normal',
+      bowelBladder: 'Normal',
+    },
+    reviewOfSystems: [],
+    previousInvestigations: [],
+    documentSummary: '',
+    redFlags: [],
+    importantNotes: '',
+    isPhysicianVerified: false,
+    sourceDocumentIds: [],
+    intakeTimestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
   });
-
-  // Keep storage in sync whenever lists change
-  useEffect(() => {
-    storageService.savePatients(patients);
-  }, [patients]);
-
-  useEffect(() => {
-    storageService.saveSummaries(summaries);
-  }, [summaries]);
-
-  useEffect(() => {
-    storageService.saveRedFlags(redFlags);
-  }, [redFlags]);
-
-  useEffect(() => {
-    storageService.saveTimelineEvents(patientTimelineEvents);
-  }, [patientTimelineEvents]);
 
   // Doctor Workspace State
   const [doctorSelectedPatientId, setDoctorSelectedPatientId] = useState<string>('');
@@ -416,7 +401,7 @@ function MainAppRouter() {
       );
       await updateClinicalSummaryInDb(generatedSummary);
 
-      const newSessionId = `MK-${new Date().getFullYear()}-${Math.floor(100000 + Math.random() * 900000)}`;
+      const newSessionId = `MK-${new Date().getFullYear()}-${Date.now().toString().slice(-6)}`;
       await saveClinicalSession({
         sessionId: newSessionId,
         patientId: currentPatient.id,
@@ -428,7 +413,7 @@ function MainAppRouter() {
         summaryStatus: 'ready',
         redFlagStatus: activeRedFlag ? (activeRedFlag.priority === 'URGENT' || activeRedFlag.priority === 'HIGH' ? 'urgent' : 'attention') : 'none',
         hasRedFlag: Boolean(activeRedFlag),
-        tokenNumber: generatedSummary.tokenNumber || `A-${Math.floor(100 + Math.random() * 900)}`,
+        tokenNumber: generatedSummary.tokenNumber || `A-${((Date.now() % 900) + 100).toString()}`,
         kioskStationId: 'Kiosk-01 (Ground Floor OPD)',
         startedAt: new Date(Date.now() - 600000).toISOString(),
         completedAt: new Date().toISOString(),
@@ -745,7 +730,7 @@ function MainAppRouter() {
           {currentView === 'ocr_pipeline' && (
             <div className="flex-1 flex flex-col relative z-10">
               <ErrorBoundary fallbackTitle="OCR Pipeline Inspector Error">
-                <DocumentProcessingView />
+                <DocumentProcessingView documents={uploadedDocs} />
               </ErrorBoundary>
             </div>
           )}
@@ -763,7 +748,7 @@ function MainAppRouter() {
           {currentView === 'abdm' && (
             <div className="flex-1 flex flex-col relative z-10">
               <ErrorBoundary fallbackTitle="ABDM Architecture View Error">
-                <AbdmArchitectureView />
+                <AbdmArchitectureView patients={patients} summaries={summaries} />
               </ErrorBoundary>
             </div>
           )}

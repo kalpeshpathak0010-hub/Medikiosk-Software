@@ -205,12 +205,19 @@ export function subscribeToAvailableDoctors(callback: (doctors: DoctorAvailabili
         snapshot.forEach((docSnap) => {
           const data = docSnap.data() as any;
           if (data.role === 'DOCTOR') {
-            const rawStatus = data.availabilityStatus || data.status;
-            const status: DoctorAvailabilityStatus = (rawStatus === 'BUSY' ? 'BUSY' : rawStatus === 'OFFLINE' ? 'OFFLINE' : 'AVAILABLE');
-            // Allowed statuses: AVAILABLE, BUSY, OFFLINE.
-            // Only AVAILABLE and optionally BUSY doctors should be displayed publicly on kiosk.
+            const rawStatus = String(data.availabilityStatus || data.status || '').toUpperCase();
+            const status: DoctorAvailabilityStatus =
+              rawStatus === 'WITH_PATIENT'
+                ? 'WITH_PATIENT'
+                : rawStatus === 'BUSY'
+                ? 'WITH_PATIENT'
+                : rawStatus === 'OFFLINE'
+                ? 'OFFLINE'
+                : 'AVAILABLE';
+            // Allowed statuses: AVAILABLE, WITH_PATIENT, OFFLINE.
+            // Only AVAILABLE and WITH_PATIENT doctors should be displayed publicly on kiosk.
             // OFFLINE doctors should not appear on the kiosk.
-            if (status === 'AVAILABLE' || status === 'BUSY') {
+            if (status === 'AVAILABLE' || status === 'WITH_PATIENT') {
               list.push({
                 id: docSnap.id,
                 uid: data.uid || docSnap.id,
@@ -274,7 +281,7 @@ export async function createPatientEncounter(
     patientId: patient.id,
     hospitalId: 'HOSP-DEL-001',
     doctorId: 'user-doc-01',
-    tokenNumber: summary.tokenNumber || `A-${Math.floor(100 + Math.random() * 900)}`,
+    tokenNumber: summary.tokenNumber || `A-${((Date.now() % 900) + 100).toString()}`,
     department: (patient as any).department || 'General Medicine',
     chiefComplaint: summary.chiefComplaint || 'Consultation',
     intakeMode,

@@ -1,14 +1,78 @@
 import React, { useState } from 'react';
 import { Sparkles, ShieldCheck, CheckCircle2, FileText, Layers, Database, Lock, Key, ArrowRight, RefreshCw } from 'lucide-react';
-import { DEMO_PATIENTS, DEMO_SUMMARIES } from '../../data/demoPatients';
+import { Patient, ClinicalSummary } from '../../types';
 import { generateFhirDiagnosticReport } from '../../services/abdmService';
 
-export const AbdmArchitectureView: React.FC = () => {
+interface AbdmArchitectureViewProps {
+  patients?: Patient[];
+  summaries?: Record<string, ClinicalSummary>;
+}
+
+const DEFAULT_SPECIMEN_PATIENT: Patient = {
+  id: 'pat-specimen-01',
+  name: 'Ayushman Beneficiary',
+  age: 42,
+  gender: 'Male',
+  phone: '+91 98765 43210',
+  abhaId: '91-4582-7391-2048',
+  isExistingPatient: true,
+};
+
+const DEFAULT_SPECIMEN_SUMMARY: ClinicalSummary = {
+  id: 'SUM-SPECIMEN-01',
+  patientId: 'pat-specimen-01',
+  visitId: 'VIS-SPECIMEN-01',
+  tokenNumber: 'A-101',
+  timestamp: new Date().toISOString(),
+  isDraft: false,
+  status: 'PHYSICIAN_VERIFIED',
+  intakeMode: 'modern',
+  patientInfo: {
+    name: 'Ayushman Beneficiary',
+    age: 42,
+    gender: 'Male',
+    abhaId: '91-4582-7391-2048',
+    phone: '+91 98765 43210',
+    department: 'General Medicine',
+  },
+  chiefComplaint: 'Acute headache and elevated systolic blood pressure',
+  historyOfPresentIllness: 'Persistent frontal throbbing headache for 3 days.',
+  pastMedicalHistory: ['Essential Hypertension (diagnosed 2021)'],
+  pastSurgicalHistory: [],
+  currentMedications: [
+    { name: 'Amlodipine', dose: '5 mg', frequency: 'Once daily (OD)', source: 'ocr_extracted' },
+  ],
+  drugAllergies: [],
+  familyHistory: ['Maternal Type 2 Diabetes Mellitus'],
+  personalHistory: {
+    diet: 'Vegetarian',
+    smoking: 'Non-smoker',
+    alcohol: 'None',
+    sleep: '6 hours/night',
+    bowelBladder: 'Regular',
+  },
+  reviewOfSystems: [],
+  previousInvestigations: [],
+  documentSummary: 'Previous OPD consultation record verified via ABDM repository.',
+  redFlags: [],
+  importantNotes: 'BP on kiosk vitals check: 148/92 mmHg.',
+  isPhysicianVerified: true,
+  verifiedByDoctorName: 'Dr. A. Varma (MD)',
+  verificationTimestamp: new Date().toISOString(),
+  sourceDocumentIds: [],
+  intakeTimestamp: '10:15 AM',
+};
+
+export const AbdmArchitectureView: React.FC<AbdmArchitectureViewProps> = ({
+  patients = [],
+  summaries = {},
+}) => {
   const [activeMilestone, setActiveMilestone] = useState<'M1' | 'M2' | 'M3'>('M1');
   const [selectedPatientIndex, setSelectedPatientIndex] = useState(0);
 
-  const currentPatient = DEMO_PATIENTS[selectedPatientIndex];
-  const currentSummary = DEMO_SUMMARIES[currentPatient.id];
+  const activePatients = patients.length > 0 ? patients : [DEFAULT_SPECIMEN_PATIENT];
+  const currentPatient = activePatients[selectedPatientIndex] || activePatients[0];
+  const currentSummary = summaries[currentPatient.id] || DEFAULT_SPECIMEN_SUMMARY;
   const fhirBundle = generateFhirDiagnosticReport(currentPatient, currentSummary);
 
   return (

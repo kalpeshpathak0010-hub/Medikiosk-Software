@@ -305,9 +305,9 @@ export async function processDocumentFile(
     hospitalName: sample.hospital,
   };
 
-  const newTimelineEvents: MedicalTimelineEvent[] = sample.timeline.map((tl) => ({
+  const newTimelineEvents: MedicalTimelineEvent[] = sample.timeline.map((tl, index) => ({
     ...tl,
-    id: `TL-${Date.now()}-${Math.random().toString(36).substring(2, 5)}`,
+    id: `TL-${Date.now()}-${(index + 1).toString().padStart(3, '0')}`,
     patientId,
     documentId: docId,
     documentTitle: document.title,

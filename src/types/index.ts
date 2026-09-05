@@ -1,6 +1,6 @@
 export type UserRole = 'PATIENT' | 'DOCTOR' | 'ADMIN';
 
-export type DoctorAvailabilityStatus = 'AVAILABLE' | 'BUSY' | 'OFFLINE';
+export type DoctorAvailabilityStatus = 'AVAILABLE' | 'WITH_PATIENT' | 'BUSY' | 'OFFLINE';
 
 export interface DoctorProfile {
   id: string;

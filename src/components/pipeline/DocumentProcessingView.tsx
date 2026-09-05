@@ -1,10 +1,57 @@
 import React, { useState } from 'react';
 import { FileText, Sparkles, CheckCircle2, AlertTriangle, Cpu, Layers, Eye, RefreshCw, ArrowRight } from 'lucide-react';
-import { DEMO_DOCUMENTS } from '../../data/demoPatients';
 import { DocumentRecord } from '../../types';
 
-export const DocumentProcessingView: React.FC = () => {
-  const [selectedDoc, setSelectedDoc] = useState<DocumentRecord>(DEMO_DOCUMENTS[0]);
+interface DocumentProcessingViewProps {
+  documents?: DocumentRecord[];
+}
+
+const SPECIMEN_DOCUMENTS: DocumentRecord[] = [
+  {
+    id: 'DOC-SPECIMEN-01',
+    patientId: 'pat-specimen-01',
+    type: 'Prescription',
+    title: 'OPD Clinical Prescription (Cardiology)',
+    date: '2026-03-01',
+    fileUrl: '',
+    ocrStatus: 'completed',
+    confidenceScore: 94,
+    extractedEntities: [
+      {
+        id: 'ENT-01',
+        name: 'Amlodipine 5mg',
+        type: 'medication',
+        confidence: 96,
+        value: '5mg OD',
+        rawText: 'Tab Amlodipine 5mg OD',
+      },
+      {
+        id: 'ENT-02',
+        name: 'Essential Hypertension',
+        type: 'diagnosis',
+        confidence: 98,
+        value: 'Grade 1',
+        rawText: 'Diagnosis: Essential HTN',
+      },
+      {
+        id: 'ENT-03',
+        name: 'Clopidogrel 75mg',
+        type: 'medication',
+        confidence: 64,
+        value: '75mg 0-1-0',
+        rawText: 'Tab Clopido... 75mg',
+      },
+    ],
+    rawOcrText: 'AIIMS Cardiology OPD - Rx: Tab Amlodipine 5mg OD x 30 days. Tab Telmisartan 40mg OD.',
+    hospitalName: 'All India Institute of Medical Sciences',
+  },
+];
+
+export const DocumentProcessingView: React.FC<DocumentProcessingViewProps> = ({
+  documents = [],
+}) => {
+  const activeDocs = documents.length > 0 ? documents : SPECIMEN_DOCUMENTS;
+  const [selectedDoc, setSelectedDoc] = useState<DocumentRecord>(activeDocs[0]);
   const [activeStage, setActiveStage] = useState<number>(3); // 1: Image, 2: OCR Text, 3: Entities, 4: FHIR
 
   return (
@@ -27,7 +74,7 @@ export const DocumentProcessingView: React.FC = () => {
 
         {/* Document Selector */}
         <div className="flex items-center gap-2">
-          {DEMO_DOCUMENTS.map((doc) => (
+          {activeDocs.map((doc) => (
             <button
               key={doc.id}
               onClick={() => setSelectedDoc(doc)}
@@ -142,7 +189,7 @@ export const DocumentProcessingView: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <span className="font-extrabold text-sm text-white">{ent.name}</span>
                         <span className="text-[10px] uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-300 font-bold">
-                          {ent.category}
+                          {ent.type}
                         </span>
                       </div>
                       <span
